@@ -4,8 +4,10 @@ import sys, shutil, io, tarfile, json, os, subprocess, urllib.request as request
 from os.path import expanduser, join, basename
 
 # Setup stdout in case the script was piped in on *nix
-if os.path.isfile('/dev/tty'):
-    sys.stdin = os.fdopen('/dev/tty', 'r')
+if os.path.exists('/dev/tty'):
+    fd = os.open('/dev/tty', os.O_RDWR)
+    if fd >= 0:
+        sys.stdin = os.fdopen(fd, 'r')
 
 connectors = ['memflow-qemu-procfs', 'memflow-coredump', 'memflow-kvm']
 
