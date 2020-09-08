@@ -7,7 +7,7 @@ from os.path import expanduser, join, basename
 if os.path.isfile('/dev/tty'):
     sys.stdin = os.fdopen('/dev/tty', 'r')
 
-connectors = ['memflow-qemu-procfs', 'memflow-coredump', 'memflow-daemon-connector', 'memflow-kvm']
+connectors = ['memflow-qemu-procfs', 'memflow-coredump', 'memflow-kvm']
 
 registry = 'https://crates.io/api/v1/crates'
 
