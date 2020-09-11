@@ -16,7 +16,10 @@ registry = 'https://crates.io/api/v1/crates'
 DB_FILE = 'db.json'
 
 def is_root():
-    return os.geteuid() == 0
+    try:
+        return os.geteuid() == 0
+    except:
+        return False # this would occur on windows, but there we do not support system-wide connectors yet
 
 output = expanduser('~/.local/lib/memflow') if not is_root() else '/opt/memflow'
 
