@@ -21,21 +21,31 @@ def is_root():
     except:
         return False # this would occur on windows, but there we do not support system-wide connectors yet
 
-output = expanduser('~/.local/lib/memflow') if not is_root() else '/opt/memflow'
+output = expanduser('~/.local/lib/memflow') if not is_root() else '/usr/local/lib/memflow'
 
 try:
     os.makedirs(output)
 except:
     pass
 
-connector_cache = join(expanduser("~"), '.memflow', 'connectors')
+connector_cache = join(expanduser("~"), '.memflow', 'connectors') if not is_root() else '/var/memflowup/connectors'
+db_dir = join(expanduser("~"), '.memflow', 'connectors') if not is_root() else '/etc/memflowup'
+db_path = join(db_dir, DB_FILE)
 
 try:
     os.makedirs(connector_cache)
 except:
     pass
 
-print(output)
+try:
+    os.makedirs(db_dir)
+except:
+    pass
+
+print("Install directory: " + output)
+print("DB path: " + db_path)
+print("Cache directory: " + connector_cache)
+print()
 
 def untar(dest_dir, buf):
     buf_file = io.BytesIO(buf)
@@ -53,12 +63,9 @@ def get_crate_info(crate):
 
     return (name, version)
 
-def get_connector_db_path():
-    return join(connector_cache, DB_FILE)
-
 def get_installed_connectors():
     try:
-        with open(get_connector_db_path()) as f:
+        with open(db_path) as f:
             data = json.load(f)
             return data
     except:
@@ -68,7 +75,7 @@ installed_connectors = get_installed_connectors()
 
 def save_connectors():
     try:
-        with open(get_connector_db_path(), 'w') as f:
+        with open(db_path, 'w') as f:
             json.dump(installed_connectors, f)
     except:
         print('error saving connector db')
@@ -101,7 +108,7 @@ def install_connector(connector):
         built_file = cargo_build(connector)
         base_name = basename(built_file)
         shutil.copy2(built_file, join(output, base_name))
-        print(built_file)
+        print("installed under: " + join(output, base_name))
         installed_connectors[connector[0]] = connector[1]
         save_connectors()
 
@@ -135,8 +142,8 @@ def install_new_connectors():
     
     print('')
 
-    if len(sys.argv) > 2 and sys.argv[2] == '-n':
-        inp = sys.argv[3:]
+    if len(sys.argv) >= 2:
+        inp = sys.argv[2:]
     else:
         inp = input('Select which crates to install (space separated list of numbers/names, or * for all): ')
         inp = inp.rstrip().split(' ')
