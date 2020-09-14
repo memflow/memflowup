@@ -31,3 +31,9 @@ Reinstall all connectors:
 ```
 ./memflowup.py update -f
 ```
+
+Update all connectors and install a system-wide connector (only Unix supports system-wide installation):
+
+```
+./memflowup.py sys update install memflow-kvm
+```
