@@ -4,6 +4,11 @@ version = "0.1.0"
 authors = ["patrick"]
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+log = { version = "0.4", default-features = false }
+simple_logger = "1.9"
+which = "4.0.2"
+ureq = "1.2"
+pbr = "1.0"
+progress-streams = "1.1"
