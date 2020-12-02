@@ -3,7 +3,6 @@ use crate::util;
 use std::env;
 use std::ffi::OsStr;
 use std::fs;
-use std::path::Path;
 use std::process::{Command, Stdio};
 
 use log::{info, warn};
@@ -14,6 +13,9 @@ pub fn setup_mode() {
 
     // 2. ask the user what packages he wants to install (filtered by the current OS)
     install_connector_branch("memflow-coredump", "master");
+    //install_connector_branch("memflow-kvm", "master"); // TODO: only linux + check if it werks
+    install_connector_branch("memflow-qemu-procfs", "master"); // TODO: only linux
+                                                               //install_connector_branch("memflow-pcileech", "master"); // TODO: seperate dependencies + submodules
 
     // 2.1. ask user if he wants nightly or stable versions
 
@@ -28,7 +30,7 @@ pub fn setup_mode() {
 fn ensure_rust() {
     match which::which("cargo") {
         Ok(cargo_dir) => {
-            info!("cargo found at '{:?}'", cargo_dir);
+            info!("cargo found at {:?}", cargo_dir);
         }
         Err(_) => {
             warn!("cargo not found, trying to install via rustup");
@@ -42,7 +44,7 @@ fn ensure_rust() {
 fn install_rust() {
     match which::which("rustup") {
         Ok(rustup_path) => {
-            info!("rustup found at '{:?}'", rustup_path.clone());
+            info!("rustup found at {:?}", rustup_path.clone());
             install_rust_toolchain(rustup_path);
         }
         Err(_) => {
@@ -114,33 +116,70 @@ fn install_connector_branch(connector_name: &str, connector_branch: &str) {
         connector_name, connector_branch
     ))
     .expect("unable to download connector archive");
+
+    info!("writing connector archive to: {:?}", connector_path.clone());
     fs::write(connector_path.clone(), connector_zip)
         .expect("unable to write rustup script to temp directory");
 
+    // create output dir
+    let mut connector_out_path = env::temp_dir();
+    connector_out_path.push(format!("{}-{}", connector_name, connector_branch));
+    info!(
+        "creating connector directory: {:?}",
+        connector_out_path.clone()
+    );
+    std::fs::create_dir(connector_out_path.clone()).ok(); // TODO: handle file exists error and clean folder
+
     // 2. unzip the archive in the temp directory
     // TODO: use crates.io zip = "0.5"
+    info!("extracting connector to: {:?}", connector_out_path.clone());
     Command::new("tar")
-        .arg("-xvf")
+        .arg("-xf")
         .arg(connector_path.clone())
         .arg("--strip")
         .arg("1")
         .arg("--directory")
-        .arg(format!("{}-{}", connector_name, connector_branch))
+        .arg(connector_out_path.clone())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .output()
         .expect("failed to extract connector tarball");
 
     // 3. run `cargo build --release --all-features` in the folder
-    let mut connector_out_path = env::temp_dir();
-    connector_out_path.push(format!("{}-{}", connector_name, connector_branch));
+    info!("compiling connector in: {:?}", connector_out_path.clone());
     Command::new("cargo")
         .arg("build")
         .arg("--release")
         .arg("--all-features")
-        .current_dir(connector_out_path)
+        .current_dir(connector_out_path.clone())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .output()
         .expect("failed to compile connector");
+
+    let connector_target_path = connector_out_path.join("target").join("release");
+    // linux: lib{}.so
+    let connector_lib_name = format!("lib{}.so", connector_name.replace("-", "_"));
+    // windows {}.dll
+
+    // 4. install connector in user dir
+    let memflow_user_path = dirs::home_dir()
+        .unwrap()
+        .join(".local")
+        .join("lib")
+        .join("memflow");
+    std::fs::create_dir_all(memflow_user_path.clone()).ok(); // TODO: handle file exists error and clean folder
+
+    info!(
+        "copying connector to: {:?}",
+        memflow_user_path.join(connector_lib_name.clone())
+    );
+    std::fs::copy(
+        connector_target_path.join(connector_lib_name.clone()),
+        memflow_user_path.join(connector_lib_name),
+    )
+    .unwrap();
+
+    // TODO:
+    // 5. install connector in global dir
 }

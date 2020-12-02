@@ -14,16 +14,25 @@ pub fn download_file(url: &str) -> Result<Vec<u8>, &'static str> {
         return Err("unable to download pdb");
     }
 
-    assert!(resp.has("Content-Length"));
-    let len = resp
-        .header("Content-Length")
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap();
+    let buffer = if resp.has("Content-Length") {
+        let len = resp
+            .header("Content-Length")
+            .and_then(|s| s.parse::<usize>().ok())
+            .unwrap();
 
-    let mut reader = resp.into_reader();
-    let buffer = read_to_end(&mut reader, len)?;
+        let mut reader = resp.into_reader();
+        let buffer = read_to_end(&mut reader, len)?;
+        assert_eq!(buffer.len(), len);
+        buffer
+    } else {
+        let mut buffer = Vec::new();
+        let mut reader = resp.into_reader();
+        reader
+            .read_to_end(&mut buffer)
+            .map_err(|_| "unable to read from http request")?;
+        buffer
+    };
 
-    assert_eq!(buffer.len(), len);
     Ok(buffer)
 }
 
