@@ -12,8 +12,8 @@ pub fn setup_mode() {
     ensure_rust();
 
     // 2. ask the user what packages he wants to install (filtered by the current OS)
-    install_connector_branch("memflow-coredump", "master");
-    //install_connector_branch("memflow-kvm", "master"); // TODO: only linux + check if it werks
+    install_connector_branch("memflow-coredump", "master"); // TODO: create next branch
+    install_connector_branch("memflow-kvm", "master"); // TODO: only linux + check if it werks -> master branch broken as it depends on dev
     install_connector_branch("memflow-qemu-procfs", "master"); // TODO: only linux
                                                                //install_connector_branch("memflow-pcileech", "master"); // TODO: seperate dependencies + submodules
 

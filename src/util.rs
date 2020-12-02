@@ -8,10 +8,10 @@ use pbr::ProgressBar;
 use progress_streams::ProgressReader;
 
 pub fn download_file(url: &str) -> Result<Vec<u8>, &'static str> {
-    info!("downloading pdb from {}", url);
+    info!("downloading file from {}", url);
     let resp = ureq::get(url).call();
     if !resp.ok() {
-        return Err("unable to download pdb");
+        return Err("unable to download file");
     }
 
     let buffer = if resp.has("Content-Length") {
