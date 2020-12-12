@@ -1,3 +1,4 @@
+mod scripting;
 mod setup_mode;
 mod util;
 

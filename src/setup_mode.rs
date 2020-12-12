@@ -1,3 +1,4 @@
+use crate::scripting;
 use crate::util;
 
 use std::env;
@@ -7,15 +8,30 @@ use std::process::{Command, Stdio};
 
 use log::{info, warn};
 
+/// TESTING
+/// TESTING
+/// TESTING
+
+// TODO: result
+
+/// TESTING
+/// TESTING
+/// TESTING
+
 pub fn setup_mode() {
     // 1. ensure rustup / cargo is installed in PATH
     ensure_rust();
 
     // 2. ask the user what packages he wants to install (filtered by the current OS)
+    scripting::execute("memflow-coredump.rhai");
+    /*
     install_connector_branch("memflow-coredump", "master"); // TODO: create next branch
+    #[cfg(linux)]
     install_connector_branch("memflow-kvm", "master"); // TODO: only linux + check if it werks -> master branch broken as it depends on dev
+    #[cfg(linux)]
     install_connector_branch("memflow-qemu-procfs", "master"); // TODO: only linux
-                                                               //install_connector_branch("memflow-pcileech", "master"); // TODO: seperate dependencies + submodules
+    install_connector_branch("memflow-pcileech", "master"); // TODO: seperate dependencies + submodules
+    */
 
     // 2.1. ask user if he wants nightly or stable versions
 
@@ -176,10 +192,26 @@ fn install_connector_branch(connector_name: &str, connector_branch: &str) {
     );
     std::fs::copy(
         connector_target_path.join(connector_lib_name.clone()),
-        memflow_user_path.join(connector_lib_name),
+        memflow_user_path.join(connector_lib_name.clone()),
     )
     .unwrap();
 
     // TODO:
     // 5. install connector in global dir
+    /*
+    //sudo::escalate_if_needed().expect("unable to write to global memflow directory");
+    let memflow_global_path = PathBuf::from("/usr/lib/memflow");
+    std::fs::create_dir_all(memflow_global_path.clone()).ok(); // TODO: handle file exists error and clean folder
+
+    info!(
+        "copying connector to: {:?}",
+        memflow_global_path.join(connector_lib_name.clone())
+    );
+    // TODO: copy via sudo subprocess
+    std::fs::copy(
+        connector_target_path.join(connector_lib_name.clone()),
+        memflow_global_path.join(connector_lib_name),
+    )
+    .unwrap();
+    */
 }

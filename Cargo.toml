@@ -8,8 +8,14 @@ edition = "2018"
 [dependencies]
 log = { version = "0.4", default-features = false }
 simple_logger = "1.9"
+rhai = "0.19"
+
+# scripts
 which = "4.0.2"
 ureq = "1.2"
 pbr = "1.0"
 progress-streams = "1.1"
 dirs = "3.0"
+
+# linux only
+sudo = "0.5"
