@@ -2,15 +2,6 @@ const repo_path = "memflow/memflow-coredump";
 const repo_branch = "master";
 
 fn build_from_git() {
-    info("downloading from " + repo_path);
-    info("downloading to " + tmp_dir());
-
     let archive_url = "https://api.github.com/repos/" + repo_path + "/zipball/" + repo_branch;
-    if download_zip(archive_url, tmp_folder("memflow-coredump")) {
-        info("github archive downloaded");
-    } else {
-        error("error downloading archive from github");
-    }
-
-    return true;
+    download_zip(archive_url, tmp_folder("memflow-coredump"));
 }

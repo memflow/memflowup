@@ -7,7 +7,9 @@ use std::path::{Path, PathBuf};
 
 use log::{error, info};
 
-use rhai::{Engine, EvalAltResult, OptimizationLevel, RegisterFn, Scope, INT};
+use rhai::{
+    Dynamic, Engine, EvalAltResult, OptimizationLevel, RegisterFn, RegisterResultFn, Scope, INT,
+};
 
 use zip::ZipArchive;
 
@@ -54,21 +56,21 @@ fn connector_system_dir() -> String {
 }
 
 /// Downloads the given url to the destination file
-fn download_file(url: &str, file: &str) -> bool {
+fn download_file(url: &str, file: &str) -> Result<Dynamic, Box<EvalAltResult>> {
     info!("download file from '{}' to '{}'", url.clone(), file.clone());
     let bytes = match util::download_file(url) {
         Ok(b) => b,
         Err(err) => {
             error!("{}", err);
-            return false;
+            return Err(err.into());
         }
     };
 
     match fs::write(file, bytes) {
-        Ok(()) => true,
+        Ok(()) => Ok(().into()),
         Err(err) => {
             error!("{}", err);
-            false
+            Err(err.to_string().into())
         }
     }
 }
@@ -78,7 +80,7 @@ fn download_file(url: &str, file: &str) -> bool {
 // - git submodule manipulation
 // - cargo command
 // - make command
-fn download_zip(url: &str, folder: &str) -> bool {
+fn download_zip(url: &str, folder: &str) -> Result<Dynamic, Box<EvalAltResult>> {
     info!(
         "download zip file from '{}' to '{}'",
         url.clone(),
@@ -88,7 +90,7 @@ fn download_zip(url: &str, folder: &str) -> bool {
         Ok(b) => b,
         Err(err) => {
             error!("{}", err);
-            return false;
+            return Err(err.into());
         }
     };
 
@@ -97,7 +99,7 @@ fn download_zip(url: &str, folder: &str) -> bool {
         Ok(archive) => archive,
         Err(err) => {
             error!("{:?}", err);
-            return false;
+            return Err(format!("{:?}", err).into());
         }
     };
 
@@ -111,15 +113,15 @@ fn download_zip(url: &str, folder: &str) -> bool {
                 let mut outfile = File::create(&outpath).expect("unable to write output file");
                 io::copy(&mut file, &mut outfile).expect("unable to write output file");
             }
-
         }
     }
 
-    true
+    Ok(().into())
 }
 
 pub fn execute<P: AsRef<Path>>(path: P) -> () {
     let mut engine = Engine::new();
+    engine.set_max_expr_depths(999, 999);
 
     engine
         .register_fn("info", info)
@@ -129,8 +131,8 @@ pub fn execute<P: AsRef<Path>>(path: P) -> () {
         .register_fn("tmp_folder", tmp_file)
         .register_fn("connector_user_dir", connector_user_dir)
         .register_fn("connector_system_dir", connector_system_dir)
-        .register_fn("download_file", download_file)
-        .register_fn("download_zip", download_zip);
+        .register_result_fn("download_file", download_file)
+        .register_result_fn("download_zip", download_zip);
 
     let mut scope = Scope::new();
     let ast = engine
@@ -138,11 +140,9 @@ pub fn execute<P: AsRef<Path>>(path: P) -> () {
         .unwrap();
     let _: () = engine.eval_ast_with_scope(&mut scope, &ast).unwrap();
 
-    let result: bool = engine
+    let _: bool = engine
         .call_fn(&mut scope, &ast, "build_from_git", ())
         .unwrap();
-
-    println!("result={}", result);
 
     //Ok(())
 }
