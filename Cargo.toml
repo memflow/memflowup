@@ -16,6 +16,7 @@ ureq = "1.2"
 pbr = "1.0"
 progress-streams = "1.1"
 dirs = "3.0"
+zip = "0.5"
 
 # linux only
 sudo = "0.5"
