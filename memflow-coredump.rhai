@@ -1,7 +1,16 @@
 const repo_path = "memflow/memflow-coredump";
 const repo_branch = "master";
+const out_folder = tmp_folder("memflow-coredump");
 
-fn build_from_git() {
+// builds the connector from source (github)
+fn build() {
+    // TODO: clean output folder if it exists
     let archive_url = "https://api.github.com/repos/" + repo_path + "/zipball/" + repo_branch;
-    download_zip(archive_url, tmp_folder("memflow-coredump"));
+    download_zip(archive_url, out_folder, 1);
+    cargo("build --release --all-features", out_folder);
+}
+
+// installs the given connector to user directory
+fn install() {
+    install_connector(out_folder + "/target/release/libmemflow_coredump.so");
 }

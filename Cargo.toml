@@ -18,5 +18,3 @@ progress-streams = "1.1"
 dirs = "3.0"
 zip = "0.5"
 
-# linux only
-sudo = "0.5"

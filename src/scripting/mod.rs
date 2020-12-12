@@ -4,12 +4,11 @@ use std::env;
 use std::fs::{self, File};
 use std::io;
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 
-use log::{error, info};
+use log::{debug, error, info, warn};
 
-use rhai::{
-    Dynamic, Engine, EvalAltResult, OptimizationLevel, RegisterFn, RegisterResultFn, Scope, INT,
-};
+use rhai::{Dynamic, Engine, EvalAltResult, RegisterFn, RegisterResultFn, Scope};
 
 use zip::ZipArchive;
 
@@ -31,28 +30,6 @@ fn tmp_dir() -> String {
 /// Returns the path to a temporary file with the given name
 fn tmp_file(name: &str) -> String {
     env::temp_dir().join(name).to_string_lossy().to_string()
-}
-
-/// Returns the memflow connector user installation directory
-fn connector_user_dir() -> String {
-    dirs::home_dir()
-        .unwrap()
-        .join(".local")
-        .join("lib")
-        .join("memflow")
-        .to_string_lossy()
-        .to_string()
-}
-
-/// Returns the memflow connector system installation directory
-fn connector_system_dir() -> String {
-    dirs::home_dir()
-        .unwrap()
-        .join(".local")
-        .join("lib")
-        .join("memflow")
-        .to_string_lossy()
-        .to_string()
 }
 
 /// Downloads the given url to the destination file
@@ -80,7 +57,7 @@ fn download_file(url: &str, file: &str) -> Result<Dynamic, Box<EvalAltResult>> {
 // - git submodule manipulation
 // - cargo command
 // - make command
-fn download_zip(url: &str, folder: &str) -> Result<Dynamic, Box<EvalAltResult>> {
+fn download_zip(url: &str, folder: &str, strip_path: i64) -> Result<Dynamic, Box<EvalAltResult>> {
     info!(
         "download zip file from '{}' to '{}'",
         url.clone(),
@@ -105,19 +82,132 @@ fn download_zip(url: &str, folder: &str) -> Result<Dynamic, Box<EvalAltResult>> 
 
     for i in 0..zip_archive.len() {
         if let Ok(mut file) = zip_archive.by_index(i) {
-            let outpath = PathBuf::from(folder).join(file.sanitized_name());
-            if file.is_dir() {
-                fs::create_dir_all(outpath).ok();
+            if let Some(file_path) = file.enclosed_name() {
+                let out_path = if strip_path > 0 {
+                    PathBuf::from(folder).join(
+                        file_path
+                            .iter()
+                            .skip(strip_path as usize)
+                            .collect::<PathBuf>(),
+                    )
+                } else {
+                    PathBuf::from(folder).join(file_path)
+                };
+
+                if file.is_dir() {
+                    fs::create_dir_all(out_path).ok();
+                } else {
+                    debug!("extracing file {:?}", out_path);
+                    let mut outfile = File::create(&out_path).expect("unable to write output file");
+                    io::copy(&mut file, &mut outfile).expect("unable to write output file");
+                }
             } else {
-                info!("extracing file {:?}", outpath);
-                let mut outfile = File::create(&outpath).expect("unable to write output file");
-                io::copy(&mut file, &mut outfile).expect("unable to write output file");
+                warn!("invalid path in zip file for file: {:?}", file.name());
             }
         }
     }
 
     Ok(().into())
 }
+
+/// Executes cargo with the given flags
+fn cargo(args: &str, pwd: &str) -> Result<Dynamic, Box<EvalAltResult>> {
+    info!("executing 'cargo {}' in '{}'", args.clone(), pwd.clone());
+
+    let mut cmd = Command::new("cargo");
+
+    cmd.current_dir(pwd)
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit());
+
+    for arg in args.split(" ") {
+        cmd.arg(arg);
+    }
+
+    match cmd.output() {
+        Ok(_) => Ok(().into()),
+        Err(err) => {
+            error!("{}", err);
+            return Err(err.to_string().into());
+        }
+    }
+}
+
+/// Copies a file from 'from' to 'to'
+fn copy_file(from: &str, to: &str) -> Result<Dynamic, Box<EvalAltResult>> {
+    // std::fs::create_dir_all(memflow_user_path.clone()).ok(); // TODO: handle file exists error and clean folder
+    match std::fs::copy(from, to) {
+        Ok(_) => Ok(().into()),
+        Err(err) => {
+            error!("{}", err);
+            return Err(err.to_string().into());
+        }
+    }
+}
+
+fn install_connector(from: &str) -> Result<Dynamic, Box<EvalAltResult>> {
+    let in_path = PathBuf::from(from);
+    {
+        let user_dir = dirs::home_dir()
+            .unwrap()
+            .join(".local")
+            .join("lib")
+            .join("memflow");
+        let out_path = user_dir.join(in_path.file_name().unwrap());
+
+        info!(
+            "copying '{:?}' to '{:?}'",
+            in_path.clone(),
+            out_path.clone()
+        );
+        match std::fs::copy(in_path.clone(), out_path.clone()) {
+            Ok(_) => (),
+            Err(err) => {
+                error!("{}", err);
+                return Err(err.to_string().into());
+            }
+        };
+    }
+
+    // TODO: check system install
+    {
+        let system_dir = PathBuf::from("/").join("usr").join("lib").join("memflow");
+        let out_path = system_dir.join(in_path.file_name().unwrap());
+
+        info!(
+            "copying '{:?}' to '{:?}'",
+            in_path.clone(),
+            out_path.clone()
+        );
+        match Command::new("sudo")
+            .arg("cp")
+            .arg(in_path.clone())
+            .arg(out_path.clone())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .output()
+        {
+            Ok(_) => (),
+            Err(err) => {
+                error!("{}", err);
+                return Err(err.to_string().into());
+            }
+        };
+    }
+    Ok(().into())
+}
+
+// 1. we need to query all available branches
+// https://api.github.com/repos/memflow/memflow-coredump/branches
+
+// if we want to install a stable version of the connector
+// we should pick the latest tag or master branch via this api:
+// https://api.github.com/repos/memflow/memflow-coredump/tags
+// this will also give us a zip file in the zipball_url / tarball_url
+
+// if we want to install a specific branch just download the branch
+// specific branches can then be downloaded as follows:
+// https://github.com/memflow/memflow-coredump/archive/master.tar.gz
 
 pub fn execute<P: AsRef<Path>>(path: P) -> () {
     let mut engine = Engine::new();
@@ -129,10 +219,11 @@ pub fn execute<P: AsRef<Path>>(path: P) -> () {
         .register_fn("tmp_dir", tmp_dir)
         .register_fn("tmp_file", tmp_file)
         .register_fn("tmp_folder", tmp_file)
-        .register_fn("connector_user_dir", connector_user_dir)
-        .register_fn("connector_system_dir", connector_system_dir)
         .register_result_fn("download_file", download_file)
-        .register_result_fn("download_zip", download_zip);
+        .register_result_fn("download_zip", download_zip)
+        .register_result_fn("cargo", cargo)
+        .register_result_fn("copy_file", copy_file)
+        .register_result_fn("install_connector", install_connector);
 
     let mut scope = Scope::new();
     let ast = engine
@@ -140,9 +231,9 @@ pub fn execute<P: AsRef<Path>>(path: P) -> () {
         .unwrap();
     let _: () = engine.eval_ast_with_scope(&mut scope, &ast).unwrap();
 
-    let _: bool = engine
-        .call_fn(&mut scope, &ast, "build_from_git", ())
-        .unwrap();
+    let _: () = engine.call_fn(&mut scope, &ast, "build", ()).unwrap();
+
+    let _: () = engine.call_fn(&mut scope, &ast, "install", ()).unwrap();
 
     //Ok(())
 }
