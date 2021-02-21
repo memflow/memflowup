@@ -71,6 +71,7 @@ fn install_rust_toolchain<P: AsRef<OsStr>>(path: P) {
 }
 
 fn install_rustup() {
+    /*
     let mut rustup_path = env::temp_dir();
     rustup_path.push("rustup.sh");
     let rustup_script =
@@ -95,4 +96,5 @@ fn install_rustup() {
         .stderr(Stdio::inherit())
         .output()
         .expect("failed to execute rustup script");
+        */
 }

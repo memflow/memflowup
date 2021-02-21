@@ -6,6 +6,23 @@ use log::info;
 
 use pbr::ProgressBar;
 use progress_streams::ProgressReader;
+use serde::de::DeserializeOwned;
+
+pub fn get_response<T: DeserializeOwned>(url: &str) -> Result<T, &'static str> {
+    let resp = ureq::get(url).call();
+    if !resp.ok() {
+        return Err("unable to download file");
+    }
+
+    let mut reader = resp.into_reader();
+
+    let mut response = String::new();
+    reader
+        .read_to_string(&mut response)
+        .map_err(|_| "unable to read from http request")?;
+
+    serde_json::from_str(&response).map_err(|_| "unable to deserialize http response")
+}
 
 pub fn download_file(url: &str) -> Result<Vec<u8>, &'static str> {
     info!("downloading file from {}", url);
