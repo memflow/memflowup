@@ -1,3 +1,9 @@
+use crate::util;
+
+use std::fs;
+
+use log::{error, info};
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -36,4 +42,70 @@ pub struct Asset {
     pub created_at: String,
     pub updated_at: String,
     pub browser_download_url: String,
+}
+
+// TODO: filter for archicture
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+fn find_platform_asset<'a>(release: &'a Release) -> Option<&'a Asset> {
+    release.assets.iter().find(|a| a.name.contains("linux"))
+}
+
+#[cfg(target_os = "windows")]
+fn find_platform_asset<'a>(release: &'a Release) -> Option<&'a Asset> {
+    release.assets.iter().find(|a| a.name.contains("windows"))
+}
+
+#[cfg(target_os = "macos")]
+fn find_platform_asset<'a>(release: &'a Release) -> Option<&'a Asset> {
+    release.assets.iter().find(|a| a.name.contains("macos"))
+}
+
+/// Downloads a release from the specified repository.
+pub fn download_repository_release_latest(group: &str, repository: &str) -> Result<String, String> {
+    let releases: Vec<Release> = util::http_get_json(&format!(
+        "https://api.github.com/repos/{}/{}/releases",
+        group, repository
+    ))?;
+
+    match releases.iter().find(|r| !r.draft && !r.prerelease) {
+        Some(release) => {
+            info!(
+                "latest stable release: {} (tag: {})",
+                release.name, release.tag_name
+            );
+            match find_platform_asset(release) {
+                Some(asset) => {
+                    info!("valid binary found for current platform: {}", asset.name);
+                    println!("yolo: {:?}", asset);
+                    let out_file = util::tmp_file(&asset.name);
+                    download_file(&asset.browser_download_url, &out_file)?;
+                    Ok(out_file)
+                },
+                None => {
+                    Err(format!("unable to find appropiate binary for the current platform for release {}/{}/{}", group, repository, release.tag_name).into())
+                }
+            }
+        }
+        None => Err(format!("unable to find a release for {}/{}", group, repository).into()),
+    }
+}
+
+/// Downloads the given url to the destination file
+fn download_file(url: &str, file: &str) -> Result<(), String> {
+    info!("download file from '{}' to '{}'", url.clone(), file.clone());
+    let bytes = match util::http_download_file(url) {
+        Ok(b) => b,
+        Err(err) => {
+            error!("{}", err);
+            return Err(err.into());
+        }
+    };
+
+    match fs::write(file, bytes) {
+        Ok(()) => Ok(().into()),
+        Err(err) => {
+            error!("{}", err);
+            Err(err.to_string().into())
+        }
+    }
 }

@@ -1,33 +1,50 @@
+use crate::github_api;
 use crate::scripting;
 use crate::util;
 
 use std::env;
 use std::ffi::OsStr;
 use std::fs;
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
 use log::{info, warn};
 
-/// TESTING
-/// TESTING
-/// TESTING
+const MODULES: &'static [&'static str] = &[
+    "memflow-coredump",
+    "memflow-qemu-procfs",
+    "memflow-pcileech",
+];
 
-// TODO: result
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+fn install_paths() -> Vec<PathBuf> {
+    vec![
+        dirs::home_dir().unwrap().join(".local/lib/memflow"),
+        "/usr/lib/memflow".into(),
+    ]
+}
 
-/// TESTING
-/// TESTING
-/// TESTING
+#[cfg(target_os = "windows")]
+fn install_paths() -> Vec<PathBuf> {
+    vec![dirs::document_dir().unwrap().join("memflow")]
+}
+
+#[cfg(target_os = "macos")]
+fn install_paths() -> Vec<PathBuf> {
+    vec![
+        dirs::home_dir().unwrap().join(".local/lib/memflow"),
+        "/usr/lib/memflow".into(),
+    ]
+}
 
 pub fn setup_mode() {
     // 1. ensure rustup / cargo is installed in PATH
     ensure_rust();
 
-    // 2. ask the user what packages he wants to install (filtered by the current OS)
-    // 2.1. ask user if he wants nightly or stable versions
-    // 2.2 ask the user wether to put them into global / local directory -> ask for sudo permissions on linux
-    scripting::execute("memflow-coredump.rhai");
+    // 2. install memflowup in PATH
 
-    // 4. done :)
+    // 3. install default set of connectors for the current platform
+    install_modules();
 }
 
 fn ensure_rust() {
@@ -36,13 +53,18 @@ fn ensure_rust() {
             info!("cargo found at {:?}", cargo_dir);
         }
         Err(_) => {
-            warn!("cargo not found, trying to install via rustup");
-            install_rust();
+            warn!("cargo not found");
+            if util::user_input_boolean("do you want memflowup to install rust via rustup?", true) {
+                info!("cargo not found, installing via rustup");
+                install_rust();
+            } else {
+                panic!("rust/cargo not found. please install it manually.");
+            }
         }
     }
 }
 
-// TODO: windows ->
+// TODO: windows / mac support
 /// Downloads and executes rustup or panics
 fn install_rust() {
     match which::which("rustup") {
@@ -57,8 +79,8 @@ fn install_rust() {
     }
 }
 
+// TODO: windows / mac support
 fn install_rust_toolchain<P: AsRef<OsStr>>(path: P) {
-    // TODO: ask user
     Command::new(path)
         .arg("toolchain")
         .arg("install")
@@ -71,11 +93,10 @@ fn install_rust_toolchain<P: AsRef<OsStr>>(path: P) {
 }
 
 fn install_rustup() {
-    /*
     let mut rustup_path = env::temp_dir();
     rustup_path.push("rustup.sh");
     let rustup_script =
-        util::download_file("https://sh.rustup.rs").expect("unable to download rustup script");
+        util::http_download_file("https://sh.rustup.rs").expect("unable to download rustup script");
     fs::write(rustup_path.clone(), rustup_script)
         .expect("unable to write rustup script to temp directory");
 
@@ -96,5 +117,25 @@ fn install_rustup() {
         .stderr(Stdio::inherit())
         .output()
         .expect("failed to execute rustup script");
-        */
+}
+
+fn install_modules() {
+    // TODO: let user decide with a number what connectors he wants to install
+    // install latest connector from binary release
+    for module in MODULES.iter() {
+        match github_api::download_repository_release_latest("memflow", module) {
+            Ok(zip_file) => match util::zip_unpack(zip_file.clone(), install_paths(), 0) {
+                Ok(_) => {
+                    // TODO: chmod +x ?
+                    info!("successfully extracted {}", zip_file);
+                }
+                Err(err) => {
+                    warn!("failed to extract {}: {}", zip_file, err);
+                }
+            },
+            Err(err) => {
+                warn!("skipping '{}': {}", module, err);
+            }
+        }
+    }
 }

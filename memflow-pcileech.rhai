@@ -1,7 +1,6 @@
-const repo_path = "memflow/memflow-coredump";
-const repo_branch = "master";
-
-fn build_from_git() {
+// build from source
+fn build() {
+    /*
     info("downloading from " + repo_path);
     info("downloading to " + tmp_dir());
 
@@ -12,6 +11,12 @@ fn build_from_git() {
     } else {
         error("error downloading archive from github");
     }
+    */
 
-    return true;
+    download_repository("memflow", "memflow-pcileech");
+}
+
+// installs the given connector to user directory
+fn install() {
+    //install_connector(out_folder + "/target/release/libmemflow_coredump.so");
 }

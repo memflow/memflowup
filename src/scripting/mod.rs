@@ -27,31 +27,6 @@ fn tmp_dir() -> String {
     env::temp_dir().to_string_lossy().to_string()
 }
 
-/// Returns the path to a temporary file with the given name
-fn tmp_file(name: &str) -> String {
-    env::temp_dir().join(name).to_string_lossy().to_string()
-}
-
-/// Downloads the given url to the destination file
-fn download_file(url: &str, file: &str) -> Result<Dynamic, Box<EvalAltResult>> {
-    info!("download file from '{}' to '{}'", url.clone(), file.clone());
-    let bytes = match util::download_file(url) {
-        Ok(b) => b,
-        Err(err) => {
-            error!("{}", err);
-            return Err(err.into());
-        }
-    };
-
-    match fs::write(file, bytes) {
-        Ok(()) => Ok(().into()),
-        Err(err) => {
-            error!("{}", err);
-            Err(err.to_string().into())
-        }
-    }
-}
-
 // TODO:
 // - function that allows downloading an entire git repository
 // - git submodule manipulation
@@ -63,7 +38,7 @@ fn download_zip(url: &str, folder: &str, strip_path: i64) -> Result<Dynamic, Box
         url.clone(),
         folder.clone()
     );
-    let bytes = match util::download_file(url) {
+    let bytes = match util::http_download_file(url) {
         Ok(b) => b,
         Err(err) => {
             error!("{}", err);
@@ -110,51 +85,6 @@ fn download_zip(url: &str, folder: &str, strip_path: i64) -> Result<Dynamic, Box
     Ok(().into())
 }
 
-#[cfg(not(any(target_os = "windows", target_os = "macos")))]
-fn find_platform_asset<'a>(release: &'a github_api::Release) -> Option<&'a github_api::Asset> {
-    release.assets.iter().find(|a| a.name.ends_with(".so"))
-}
-
-#[cfg(target_os = "windows")]
-fn find_platform_asset<'a>(release: &'a github_api::Release) -> Option<&'a github_api::Asset> {
-    release.assets.iter().find(|a| a.name.ends_with(".dll"))
-}
-
-#[cfg(target_os = "macos")]
-fn find_platform_asset<'a>(release: &'a github_api::Release) -> Option<&'a github_api::Asset> {
-    release.assets.iter().find(|a| a.name.ends_with(".dylib"))
-}
-
-fn download_repository_binary(
-    group: &str,
-    repository: &str,
-) -> Result<Dynamic, Box<EvalAltResult>> {
-    let releases: Vec<github_api::Release> = util::get_response(&format!(
-        "https://api.github.com/repos/{}/{}/releases",
-        group, repository
-    ))?;
-
-    match releases.iter().find(|r| !r.draft && !r.prerelease) {
-        Some(release) => {
-            info!(
-                "latest stable release: {} (tag: {})",
-                release.name, release.tag_name
-            );
-            match find_platform_asset(release) {
-                Some(asset) => {
-                    info!("valid binary found for current platform: {}", asset.name);
-                    println!("yolo: {:?}", asset);
-                    download_file(&asset.browser_download_url, &tmp_file(&asset.name))
-                },
-                None => {
-                    Err(format!("unable to find appropiate binary for the current platform for release {}/{}/{}", group, repository, release.tag_name).into())
-                }
-            }
-        }
-        None => Err(format!("unable to find a release for {}/{}", group, repository).into()),
-    }
-}
-
 // TODO: global configuration for binary / source / tag or branch
 fn download_repository(group: &str, repository: &str) -> Result<Dynamic, Box<EvalAltResult>> {
     let download_binary = true;
@@ -162,7 +92,7 @@ fn download_repository(group: &str, repository: &str) -> Result<Dynamic, Box<Eva
     info!("downloading repository {}/{}", group, repository);
 
     if download_binary {
-        return download_repository_binary(group, repository);
+        //return download_repository_binary(group, repository);
     } else {
         // select appropiate version and download
     }
@@ -330,9 +260,9 @@ pub fn execute<P: AsRef<Path>>(path: P) -> () {
         .register_fn("info", info)
         .register_fn("error", error)
         .register_fn("tmp_dir", tmp_dir)
-        .register_fn("tmp_file", tmp_file)
-        .register_fn("tmp_folder", tmp_file)
-        .register_result_fn("download_file", download_file)
+        //        .register_fn("tmp_file", tmp_file)
+        //      .register_fn("tmp_folder", tmp_file)
+        //    .register_result_fn("download_file", download_file)
         .register_result_fn("download_zip", download_zip)
         .register_result_fn("download_repository", download_repository)
         .register_result_fn("cargo", cargo)
