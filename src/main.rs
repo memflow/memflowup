@@ -1,4 +1,6 @@
+mod database;
 mod github_api;
+mod package;
 mod scripting;
 mod setup_mode;
 mod util;

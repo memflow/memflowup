@@ -10,11 +10,7 @@ use std::process::{Command, Stdio};
 
 use log::{info, warn};
 
-const MODULES: &'static [&'static str] = &[
-    "memflow-coredump",
-    "memflow-qemu-procfs",
-    "memflow-pcileech",
-];
+use crate::package::*;
 
 #[cfg(not(any(target_os = "windows", target_os = "macos")))]
 fn install_paths() -> Vec<PathBuf> {
@@ -120,22 +116,57 @@ fn install_rustup() {
 }
 
 fn install_modules() {
-    // TODO: let user decide with a number what connectors he wants to install
-    // install latest connector from binary release
-    for module in MODULES.iter() {
-        match github_api::download_repository_release_latest("memflow", module) {
-            Ok(zip_file) => match util::zip_unpack(zip_file.clone(), install_paths(), 0) {
-                Ok(_) => {
-                    // TODO: chmod +x ?
-                    info!("successfully extracted {}", zip_file);
-                }
-                Err(err) => {
-                    warn!("failed to extract {}: {}", zip_file, err);
-                }
-            },
-            Err(err) => {
-                warn!("skipping '{}': {}", module, err);
-            }
-        }
+    let packages = load_packages();
+
+    let dev_branch = true;
+
+    println!(
+        "using {} channel",
+        if dev_branch { "dev" } else { "stable" }
+    );
+
+    println!();
+
+    println!("Available packages:");
+
+    for (i, package) in packages
+        .iter()
+        .filter(|p| p.is_in_channel(dev_branch))
+        .enumerate()
+    {
+        println!("{}. {} - {:?}", i, package.name, package.ty);
     }
+
+    println!();
+
+    println!("Type packages to install by number, name, or type * for all:");
+
+    let mut output = String::new();
+    std::io::stdin().read_line(&mut output).unwrap();
+
+    let trimmed = output.trim();
+
+    let install_all = trimmed == "*";
+
+    let (indices, names): (Vec<_>, Vec<_>) = trimmed
+        .split_whitespace()
+        .flat_map(|s| s.split(','))
+        .flat_map(|s| s.split(';'))
+        .partition(|s| s.chars().all(|c| c.is_numeric()));
+
+    let indices = indices
+        .into_iter()
+        .map(str::parse::<usize>)
+        .map(Result::unwrap)
+        .collect::<Vec<_>>();
+
+    packages
+        .into_iter()
+        .filter(|p| p.is_in_channel(dev_branch))
+        .enumerate()
+        .filter(|(i, p)| install_all || indices.contains(i) || names.contains(&p.name.as_str()))
+        .for_each(|(_, p)| {
+            println!("Installing {}", p.name);
+            p.install_source(dev_branch);
+        });
 }

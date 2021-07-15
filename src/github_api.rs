@@ -109,3 +109,15 @@ fn download_file(url: &str, file: &str) -> Result<(), String> {
         }
     }
 }
+
+pub fn download_raw(repo: &str, branch: &str, path: &str) -> Result<Vec<u8>, &'static str> {
+    let url = format!(
+        "{}/{}/{}",
+        repo.replace("github.com", "raw.githubusercontent.com"),
+        branch,
+        path
+    );
+    info!("download raw from '{}'", url);
+
+    util::http_download_file(&url)
+}

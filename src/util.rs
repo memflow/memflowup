@@ -122,14 +122,8 @@ fn read_to_end<T: Read>(reader: &mut T, len: usize) -> Result<Vec<u8>, &'static 
     Ok(buffer)
 }
 
-pub fn zip_unpack(
-    in_file: impl AsRef<Path>,
-    out_folders: Vec<PathBuf>,
-    strip_path: i64,
-) -> Result<(), String> {
-    let zip_buf = fs::read(in_file).map_err(|_| "unable to open input zip file")?;
-
-    let zip_cursor = std::io::Cursor::new(&zip_buf[..]);
+pub fn zip_unpack(in_buf: &[u8], out_dir: &PathBuf, strip_path: i64) -> Result<(), String> {
+    let zip_cursor = std::io::Cursor::new(&in_buf[..]);
     let mut zip_archive = match ZipArchive::new(zip_cursor) {
         Ok(archive) => archive,
         Err(err) => {
@@ -140,47 +134,41 @@ pub fn zip_unpack(
 
     for i in 0..zip_archive.len() {
         if let Ok(mut file) = zip_archive.by_index(i) {
-            for folder in out_folders.iter() {
-                if let Some(file_path) = file.enclosed_name() {
-                    let out_path = if strip_path > 0 {
-                        PathBuf::from(folder).join(
-                            file_path
-                                .iter()
-                                .skip(strip_path as usize)
-                                .collect::<PathBuf>(),
-                        )
-                    } else {
-                        PathBuf::from(folder).join(file_path)
-                    };
+            if let Some(file_path) = file.enclosed_name() {
+                let out_path = if strip_path > 0 {
+                    PathBuf::from(out_dir).join(
+                        file_path
+                            .iter()
+                            .skip(strip_path as usize)
+                            .collect::<PathBuf>(),
+                    )
+                } else {
+                    PathBuf::from(out_dir).join(file_path)
+                };
 
-                    if file.is_dir() {
-                        fs::create_dir_all(out_path).ok();
-                    } else {
-                        debug!("extracting file {:?}", out_path);
-                        match File::create(&out_path) {
-                            Ok(mut outfile) => match io::copy(&mut file, &mut outfile) {
-                                Ok(_) => {
-                                    info!(
-                                        "successfuly extracted file to {}",
-                                        out_path.to_string_lossy()
-                                    );
-                                }
-                                Err(err) => {
-                                    warn!(
-                                        "skipping unzip to {}: {}",
-                                        out_path.to_string_lossy(),
-                                        err
-                                    );
-                                }
-                            },
+                if file.is_dir() {
+                    fs::create_dir_all(out_path).ok();
+                } else {
+                    debug!("extracting file {:?}", out_path);
+                    match File::create(&out_path) {
+                        Ok(mut outfile) => match io::copy(&mut file, &mut outfile) {
+                            Ok(_) => {
+                                info!(
+                                    "successfuly extracted file to {}",
+                                    out_path.to_string_lossy()
+                                );
+                            }
                             Err(err) => {
                                 warn!("skipping unzip to {}: {}", out_path.to_string_lossy(), err);
                             }
+                        },
+                        Err(err) => {
+                            warn!("skipping unzip to {}: {}", out_path.to_string_lossy(), err);
                         }
                     }
-                } else {
-                    warn!("invalid path in zip file for file: {:?}", file.name());
                 }
+            } else {
+                warn!("invalid path in zip file for file: {:?}", file.name());
             }
         }
     }

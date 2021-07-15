@@ -1,4 +1,4 @@
-use crate::{github_api, util};
+use crate::{github_api, package::Package, util};
 
 use std::env;
 use std::fs::{self, File};
@@ -11,6 +11,12 @@ use log::{debug, error, info, warn};
 use rhai::{Dynamic, Engine, EvalAltResult, RegisterFn, RegisterResultFn, Scope};
 
 use zip::ZipArchive;
+
+use std::cell::RefCell;
+
+use tmp_env::*;
+
+const DEFAULT_SCRIPT: &str = include_str!("../../standard.rhai");
 
 /// Prints info
 fn info(s: &str) -> () {
@@ -176,68 +182,166 @@ fn cargo(args: &str, pwd: &str) -> Result<Dynamic, Box<EvalAltResult>> {
     }
 }
 
+fn name2lib(name: &str) -> String {
+    let name = name.replace("-", "_");
+    #[cfg(unix)]
+    {
+        format!("lib{}.so", name)
+    }
+    #[cfg(macos)]
+    {
+        format!("lib{}.dylib", name)
+    }
+    #[cfg(windows)]
+    {
+        format!("{}.dll", name)
+    }
+}
+
 /// Copies a file from 'from' to 'to'
-fn copy_file(from: &str, to: &str) -> Result<Dynamic, Box<EvalAltResult>> {
+fn copy_file(
+    from: &impl AsRef<Path>,
+    to: &impl AsRef<Path>,
+    elevate_if_needed: bool,
+) -> Result<(), std::io::Error> {
+    info!(
+        "copying '{:?}' to '{:?}'",
+        from.as_ref().to_string_lossy(),
+        to.as_ref().to_string_lossy(),
+    );
+
     // std::fs::create_dir_all(memflow_user_path.clone()).ok(); // TODO: handle file exists error and clean folder
     match std::fs::copy(from, to) {
-        Ok(_) => Ok(().into()),
+        Ok(_) => Ok(()),
         Err(err) => {
-            error!("{}", err);
-            return Err(err.to_string().into());
+            if err.kind() == std::io::ErrorKind::PermissionDenied && elevate_if_needed {
+                info!(
+                    "Elevated copy {} to {}",
+                    from.as_ref().to_string_lossy(),
+                    to.as_ref().to_string_lossy()
+                );
+                match Command::new("sudo")
+                    .arg("cp")
+                    .arg(from.as_ref().to_str().ok_or_else(|| {
+                        std::io::Error::new(err.kind(), "from path contains invalid characters!")
+                    })?)
+                    .arg(to.as_ref().to_str().ok_or_else(|| {
+                        std::io::Error::new(err.kind(), "to path contains invalid characters!")
+                    })?)
+                    .stdout(Stdio::inherit())
+                    .stderr(Stdio::inherit())
+                    .output()
+                {
+                    Ok(_) => return Ok(()),
+                    Err(err) => {
+                        error!("{}", err);
+                    }
+                };
+            }
+            error!("{}", &err);
+            return Err(err);
         }
     }
 }
 
-fn install_connector(from: &str) -> Result<Dynamic, Box<EvalAltResult>> {
-    let in_path = PathBuf::from(from);
-    {
-        let user_dir = dirs::home_dir()
-            .unwrap()
-            .join(".local")
-            .join("lib")
-            .join("memflow");
-        let out_path = user_dir.join(in_path.file_name().unwrap());
+#[derive(Clone)]
+pub struct ScriptCtx<'a> {
+    package: &'a Package,
+    tmp_dir: &'a TmpDir,
+    dev_branch: bool,
+    installed_local: &'a RefCell<Vec<String>>,
+    installed_system: &'a RefCell<Vec<String>>,
+}
 
-        info!(
-            "copying '{:?}' to '{:?}'",
-            in_path.clone(),
-            out_path.clone()
+impl<'a> ScriptCtx<'a> {
+    fn download_repository(&mut self) -> Result<Vec<u8>, Box<EvalAltResult>> {
+        // TODO: support non-github repos
+        let url = format!(
+            "{}/archive/refs/heads/{}.zip",
+            self.package.repo_root_url,
+            self.package.branch(self.dev_branch).unwrap()
         );
-        match std::fs::copy(in_path.clone(), out_path.clone()) {
-            Ok(_) => (),
-            Err(err) => {
-                error!("{}", err);
-                return Err(err.to_string().into());
-            }
-        };
+
+        info!("download zip file from '{}'", &url,);
+
+        util::http_download_file(&url).map_err(Into::into)
     }
 
-    // TODO: check system install
-    {
-        let system_dir = PathBuf::from("/").join("usr").join("lib").join("memflow");
-        let out_path = system_dir.join(in_path.file_name().unwrap());
+    fn extract(&mut self, bytes: Vec<u8>) -> Result<String, Box<EvalAltResult>> {
+        let mut path: PathBuf = self.tmp_dir.as_path().into();
 
-        info!(
-            "copying '{:?}' to '{:?}'",
-            in_path.clone(),
-            out_path.clone()
+        path.push("repository");
+
+        info!("Extracting {:?}", path);
+        util::zip_unpack(&bytes, &path, 1)?;
+
+        Ok(path.to_str().ok_or("failed to extract")?.to_string())
+    }
+
+    fn crate_name(&mut self) -> String {
+        self.package.name.clone()
+    }
+
+    fn copy_cargo_plugin_artifact(
+        &mut self,
+        path: &str,
+        artifact: &str,
+    ) -> Result<(), Box<EvalAltResult>> {
+        let mut in_path = PathBuf::from(path);
+        in_path.push("target");
+        in_path.push("release");
+        in_path.push(artifact);
+
+        let stem = in_path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .ok_or("malformed filename")?;
+        let extension = in_path
+            .extension()
+            .and_then(|s| s.to_str())
+            .ok_or("malformed extension")?;
+        let out_filename = format!(
+            "{}.{}.{}",
+            stem,
+            if self.dev_branch { "dev" } else { "stable" },
+            extension
         );
-        match Command::new("sudo")
-            .arg("cp")
-            .arg(in_path.clone())
-            .arg(out_path.clone())
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .output()
+
         {
-            Ok(_) => (),
-            Err(err) => {
-                error!("{}", err);
-                return Err(err.to_string().into());
-            }
-        };
+            let user_dir = dirs::home_dir()
+                .unwrap()
+                .join(".local")
+                .join("lib")
+                .join("memflow");
+            let out_path = user_dir.join(&out_filename);
+
+            out_path.to_str().ok_or("invalid output path")?;
+
+            copy_file(&in_path, &out_path, false).map_err(|_| "failed to copy to user path")?;
+
+            self.installed_local
+                .try_borrow_mut()
+                .unwrap()
+                .push(out_path.to_str().unwrap().to_string());
+        }
+
+        // TODO: check system install
+        {
+            let system_dir = PathBuf::from("/").join("usr").join("lib").join("memflow");
+            let out_path = system_dir.join(out_filename);
+
+            out_path.to_str().ok_or("invalid output path")?;
+
+            copy_file(&in_path, &out_path, true).map_err(|_| "failed to copy to system path")?;
+
+            self.installed_system
+                .try_borrow_mut()
+                .unwrap()
+                .push(out_path.to_str().unwrap().to_string());
+        }
+
+        Ok(().into())
     }
-    Ok(().into())
 }
 
 // 1. we need to query all available branches
@@ -252,32 +356,79 @@ fn install_connector(from: &str) -> Result<Dynamic, Box<EvalAltResult>> {
 // specific branches can then be downloaded as follows:
 // https://github.com/memflow/memflow-coredump/archive/master.tar.gz
 
-pub fn execute<P: AsRef<Path>>(path: P) -> () {
+/*pub fn execute_file<P: AsRef<Path>>(path: P) -> () {
+}*/
+
+pub fn execute_installer(
+    package: &Package,
+    dev_branch: bool,
+    entrypoint: &str,
+) -> Result<(Vec<String>, Vec<String>), Box<dyn std::error::Error>> {
+    let tmp_dir = create_temp_dir()?;
+
+    let installed_local = RefCell::new(vec![]);
+    let installed_system = RefCell::new(vec![]);
+
+    let ctx = ScriptCtx {
+        package,
+        tmp_dir: &tmp_dir,
+        dev_branch,
+        installed_local: &installed_local,
+        installed_system: &installed_system,
+    };
+
+    // TODO: get the latest commit hash of the branch, to have atomicity and to return it to the
+    // caller for database.
+
+    let download_script = if let Some(path) = &package.install_script_path {
+        Some(
+            github_api::download_raw(
+                &package.repo_root_url,
+                package.branch(dev_branch).unwrap(),
+                &path,
+            )
+            .map(|b| String::from_utf8_lossy(&b).to_string())?,
+        )
+    } else {
+        None
+    };
+
+    let script = download_script.as_deref().unwrap_or(DEFAULT_SCRIPT);
+
     let mut engine = Engine::new();
     engine.set_max_expr_depths(999, 999);
 
     engine
+        .register_type::<ScriptCtx>()
+        .register_result_fn("download_repository", ScriptCtx::download_repository)
+        .register_result_fn("extract", ScriptCtx::extract)
+        .register_fn("crate_name", ScriptCtx::crate_name)
+        .register_result_fn("copy_cargo_plugin_artifact", ScriptCtx::copy_cargo_plugin_artifact)
         .register_fn("info", info)
         .register_fn("error", error)
-        .register_fn("tmp_dir", tmp_dir)
+        .register_fn("name_to_lib", name2lib)
+        //.register_fn("tmp_dir", tmp_dir)
         //        .register_fn("tmp_file", tmp_file)
         //      .register_fn("tmp_folder", tmp_file)
         //    .register_result_fn("download_file", download_file)
-        .register_result_fn("download_zip", download_zip)
-        .register_result_fn("download_repository", download_repository)
+        //.register_result_fn("download_zip", download_zip)
+        //.register_result_fn("download_repository", download_repository)
         .register_result_fn("cargo", cargo)
-        .register_result_fn("copy_file", copy_file)
-        .register_result_fn("install_connector", install_connector);
+        //.register_result_fn("copy_file", copy_file)
+        //.register_result_fn("install_connector", install_connector);
+        ;
 
     let mut scope = Scope::new();
-    let ast = engine
-        .compile_file_with_scope(&mut scope, path.as_ref().into())
-        .unwrap();
-    let _: () = engine.eval_ast_with_scope(&mut scope, &ast).unwrap();
+    let ast = engine.compile_with_scope(&mut scope, script).unwrap();
 
-    let _: () = engine.call_fn(&mut scope, &ast, "build", ()).unwrap();
+    // SAFETY: engine does not outlive the ctx/package.
+    let ctx = unsafe { std::mem::transmute::<_, ScriptCtx<'static>>(ctx) };
 
-    let _: () = engine.call_fn(&mut scope, &ast, "install", ()).unwrap();
+    engine
+        .call_fn(&mut scope, &ast, entrypoint, (ctx,))
+        .map_err(|e| e.to_string())?;
 
-    //Ok(())
+    std::mem::drop(engine);
+
+    Ok((installed_local.into_inner(), installed_system.into_inner()))
 }

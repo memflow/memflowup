@@ -17,6 +17,7 @@ pbr = "1.0"
 progress-streams = "1.1"
 dirs = "3.0"
 zip = "0.5"
+tmp_env = "0.1"
 
 # github api
 serde = "1.0"
