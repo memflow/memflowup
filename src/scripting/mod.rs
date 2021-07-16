@@ -1,4 +1,4 @@
-use crate::{github_api, package::Package, util};
+use crate::{database::EntryType, github_api, package::Package, util};
 
 use std::env;
 use std::fs::{self, File};
@@ -14,9 +14,11 @@ use zip::ZipArchive;
 
 use std::cell::RefCell;
 
-use tmp_env::*;
+use crc::{Crc, CRC_64_GO_ISO};
 
 const DEFAULT_SCRIPT: &str = include_str!("../../standard.rhai");
+
+const CRC: Crc<u64> = Crc::<u64>::new(&CRC_64_GO_ISO);
 
 /// Prints info
 fn info(s: &str) -> () {
@@ -198,69 +200,21 @@ fn name2lib(name: &str) -> String {
     }
 }
 
-/// Copies a file from 'from' to 'to'
-fn copy_file(
-    from: &impl AsRef<Path>,
-    to: &impl AsRef<Path>,
-    elevate_if_needed: bool,
-) -> Result<(), std::io::Error> {
-    info!(
-        "copying '{:?}' to '{:?}'",
-        from.as_ref().to_string_lossy(),
-        to.as_ref().to_string_lossy(),
-    );
-
-    // std::fs::create_dir_all(memflow_user_path.clone()).ok(); // TODO: handle file exists error and clean folder
-    match std::fs::copy(from, to) {
-        Ok(_) => Ok(()),
-        Err(err) => {
-            if err.kind() == std::io::ErrorKind::PermissionDenied && elevate_if_needed {
-                info!(
-                    "Elevated copy {} to {}",
-                    from.as_ref().to_string_lossy(),
-                    to.as_ref().to_string_lossy()
-                );
-                match Command::new("sudo")
-                    .arg("cp")
-                    .arg(from.as_ref().to_str().ok_or_else(|| {
-                        std::io::Error::new(err.kind(), "from path contains invalid characters!")
-                    })?)
-                    .arg(to.as_ref().to_str().ok_or_else(|| {
-                        std::io::Error::new(err.kind(), "to path contains invalid characters!")
-                    })?)
-                    .stdout(Stdio::inherit())
-                    .stderr(Stdio::inherit())
-                    .output()
-                {
-                    Ok(_) => return Ok(()),
-                    Err(err) => {
-                        error!("{}", err);
-                    }
-                };
-            }
-            error!("{}", &err);
-            return Err(err);
-        }
-    }
-}
-
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct ScriptCtx<'a> {
     package: &'a Package,
-    tmp_dir: &'a TmpDir,
+    tmp_dir: &'a util::TempDir,
     dev_branch: bool,
     installed_local: &'a RefCell<Vec<String>>,
     installed_system: &'a RefCell<Vec<String>>,
+    installed_release: &'a RefCell<Option<EntryType>>,
+    sha: &'a str,
 }
 
 impl<'a> ScriptCtx<'a> {
     fn download_repository(&mut self) -> Result<Vec<u8>, Box<EvalAltResult>> {
         // TODO: support non-github repos
-        let url = format!(
-            "{}/archive/refs/heads/{}.zip",
-            self.package.repo_root_url,
-            self.package.branch(self.dev_branch).unwrap()
-        );
+        let url = format!("{}/archive/{}.zip", self.package.repo_root_url, self.sha,);
 
         info!("download zip file from '{}'", &url,);
 
@@ -270,7 +224,9 @@ impl<'a> ScriptCtx<'a> {
     fn extract(&mut self, bytes: Vec<u8>) -> Result<String, Box<EvalAltResult>> {
         let mut path: PathBuf = self.tmp_dir.as_path().into();
 
-        path.push("repository");
+        let dir = format!("{:x}", CRC.checksum(&bytes));
+
+        path.push(&dir);
 
         info!("Extracting {:?}", path);
         util::zip_unpack(&bytes, &path, 1)?;
@@ -287,6 +243,10 @@ impl<'a> ScriptCtx<'a> {
         path: &str,
         artifact: &str,
     ) -> Result<(), Box<EvalAltResult>> {
+        // Mark that we did source installation:
+        *self.installed_release.try_borrow_mut().unwrap() =
+            Some(EntryType::GitSource(self.sha.into()));
+
         let mut in_path = PathBuf::from(path);
         in_path.push("target");
         in_path.push("release");
@@ -317,7 +277,8 @@ impl<'a> ScriptCtx<'a> {
 
             out_path.to_str().ok_or("invalid output path")?;
 
-            copy_file(&in_path, &out_path, false).map_err(|_| "failed to copy to user path")?;
+            util::copy_file(&in_path, &out_path, false)
+                .map_err(|_| "failed to copy to user path")?;
 
             self.installed_local
                 .try_borrow_mut()
@@ -332,7 +293,8 @@ impl<'a> ScriptCtx<'a> {
 
             out_path.to_str().ok_or("invalid output path")?;
 
-            copy_file(&in_path, &out_path, true).map_err(|_| "failed to copy to system path")?;
+            util::copy_file(&in_path, &out_path, true)
+                .map_err(|_| "failed to copy to system path")?;
 
             self.installed_system
                 .try_borrow_mut()
@@ -363,11 +325,22 @@ pub fn execute_installer(
     package: &Package,
     dev_branch: bool,
     entrypoint: &str,
-) -> Result<(Vec<String>, Vec<String>), Box<dyn std::error::Error>> {
-    let tmp_dir = create_temp_dir()?;
+) -> Result<(EntryType, Vec<String>, Vec<String>), Box<dyn std::error::Error>> {
+    let tmp_dir = util::make_temp_dir(
+        "memflowup_build",
+        &[
+            &package.name,
+            entrypoint,
+            package.branch(dev_branch).unwrap(),
+        ],
+    )?;
 
     let installed_local = RefCell::new(vec![]);
     let installed_system = RefCell::new(vec![]);
+    let installed_release = RefCell::new(None);
+
+    let branch =
+        github_api::get_branch(&package.repo_root_url, package.branch(dev_branch).unwrap())?;
 
     let ctx = ScriptCtx {
         package,
@@ -375,19 +348,14 @@ pub fn execute_installer(
         dev_branch,
         installed_local: &installed_local,
         installed_system: &installed_system,
+        installed_release: &installed_release,
+        sha: &branch.commit.sha,
     };
-
-    // TODO: get the latest commit hash of the branch, to have atomicity and to return it to the
-    // caller for database.
 
     let download_script = if let Some(path) = &package.install_script_path {
         Some(
-            github_api::download_raw(
-                &package.repo_root_url,
-                package.branch(dev_branch).unwrap(),
-                &path,
-            )
-            .map(|b| String::from_utf8_lossy(&b).to_string())?,
+            github_api::download_raw(&package.repo_root_url, &branch.commit.sha, &path)
+                .map(|b| String::from_utf8_lossy(&b).to_string())?,
         )
     } else {
         None
@@ -430,5 +398,12 @@ pub fn execute_installer(
 
     std::mem::drop(engine);
 
-    Ok((installed_local.into_inner(), installed_system.into_inner()))
+    Ok((
+        installed_release.into_inner().ok_or_else(|| {
+            // TODO: cleanup artifacts
+            "Script failed to mark installed release!"
+        })?,
+        installed_local.into_inner(),
+        installed_system.into_inner(),
+    ))
 }

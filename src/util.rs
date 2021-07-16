@@ -2,6 +2,7 @@ use std::env;
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
@@ -11,6 +12,10 @@ use pbr::ProgressBar;
 use progress_streams::ProgressReader;
 use serde::de::DeserializeOwned;
 use zip::ZipArchive;
+
+use crc::{Crc, CRC_64_GO_ISO};
+
+const CRC: Crc<u64> = Crc::<u64>::new(&CRC_64_GO_ISO);
 
 pub fn user_input_boolean(question: &str, default: bool) -> bool {
     loop {
@@ -174,4 +179,94 @@ pub fn zip_unpack(in_buf: &[u8], out_dir: &PathBuf, strip_path: i64) -> Result<(
     }
 
     Ok(())
+}
+
+/// Copies a file from 'from' to 'to'
+pub fn copy_file(
+    from: &impl AsRef<Path>,
+    to: &impl AsRef<Path>,
+    elevate_if_needed: bool,
+) -> Result<(), std::io::Error> {
+    info!(
+        "copying '{:?}' to '{:?}'",
+        from.as_ref().to_string_lossy(),
+        to.as_ref().to_string_lossy(),
+    );
+
+    // std::fs::create_dir_all(memflow_user_path.clone()).ok(); // TODO: handle file exists error and clean folder
+    match std::fs::copy(from, to) {
+        Ok(_) => Ok(()),
+        Err(err) => {
+            if err.kind() == std::io::ErrorKind::PermissionDenied && elevate_if_needed {
+                info!(
+                    "Elevated copy {} to {}",
+                    from.as_ref().to_string_lossy(),
+                    to.as_ref().to_string_lossy()
+                );
+                match Command::new("sudo")
+                    .arg("cp")
+                    .arg(from.as_ref().to_str().ok_or_else(|| {
+                        std::io::Error::new(err.kind(), "from path contains invalid characters!")
+                    })?)
+                    .arg(to.as_ref().to_str().ok_or_else(|| {
+                        std::io::Error::new(err.kind(), "to path contains invalid characters!")
+                    })?)
+                    .stdout(Stdio::inherit())
+                    .stderr(Stdio::inherit())
+                    .output()
+                {
+                    Ok(_) => return Ok(()),
+                    Err(err) => {
+                        error!("{}", err);
+                    }
+                };
+            }
+            error!("{}", &err);
+            return Err(err);
+        }
+    }
+}
+
+/// Create a temporary directory, but it can already be an existing one.
+pub fn make_temp_dir(subdir: &str, names: &[&str]) -> Result<TempDir, std::io::Error> {
+    let tmp_dir = std::env::temp_dir();
+
+    let mut digest = CRC.digest();
+
+    for n in names {
+        digest.update(n.as_bytes());
+    }
+
+    let tmp_path = tmp_dir.join(&format!("{}/{}", subdir, digest.finalize()));
+    std::fs::create_dir_all(&tmp_path)?;
+
+    Ok(TempDir(tmp_path))
+}
+
+pub struct TempDir(PathBuf);
+
+impl std::ops::Deref for TempDir {
+    type Target = PathBuf;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for TempDir {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl std::fmt::Debug for TempDir {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.0)
+    }
+}
+
+impl Drop for TempDir {
+    fn drop(&mut self) {
+        std::fs::remove_dir_all(&self.0).expect("cannot delete the tmp dir")
+    }
 }

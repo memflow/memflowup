@@ -1,6 +1,6 @@
 use serde::*;
 
-use crate::scripting;
+use crate::{database, scripting};
 
 const DEFAULT_INDEX: &str = include_str!("../index.json");
 
@@ -18,7 +18,29 @@ pub struct Package {
 
 impl Package {
     pub fn install_source(&self, dev_branch: bool) {
-        scripting::execute_installer(self, dev_branch, "build_from_source").unwrap();
+        let (ty, local_artifacts, system_artifacts) =
+            scripting::execute_installer(self, dev_branch, "build_from_source").unwrap();
+
+        database::commit_entry(
+            &self.name,
+            database::DatabaseEntry {
+                ty: ty.clone(),
+                artifacts: local_artifacts,
+            },
+            dev_branch,
+            false,
+        )
+        .unwrap();
+        database::commit_entry(
+            &self.name,
+            database::DatabaseEntry {
+                ty,
+                artifacts: system_artifacts,
+            },
+            dev_branch,
+            true,
+        )
+        .unwrap();
     }
 
     pub fn is_in_channel(&self, dev_branch: bool) -> bool {

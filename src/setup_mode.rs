@@ -1,3 +1,4 @@
+use crate::database::{load_database, DatabaseEntry, EntryType};
 use crate::github_api;
 use crate::scripting;
 use crate::util;
@@ -120,6 +121,9 @@ fn install_modules() {
 
     let dev_branch = true;
 
+    let db_user = load_database(dev_branch, false).unwrap();
+    let db_sys = load_database(dev_branch, true).unwrap();
+
     println!(
         "using {} channel",
         if dev_branch { "dev" } else { "stable" }
@@ -134,7 +138,39 @@ fn install_modules() {
         .filter(|p| p.is_in_channel(dev_branch))
         .enumerate()
     {
-        println!("{}. {} - {:?}", i, package.name, package.ty);
+        print!("{}. {} - {:?}", i, package.name, package.ty);
+
+        let user_install = db_user.get(&package.name);
+        let sys_install = db_sys.get(&package.name);
+
+        if user_install.is_some() || sys_install.is_some() {
+            print!(" [installed: ");
+            match user_install {
+                Some(DatabaseEntry {
+                    ty: EntryType::GitSource(hash),
+                    ..
+                }) => print!("user - git {}; ", hash.chars().take(6).collect::<String>()),
+                Some(DatabaseEntry {
+                    ty: EntryType::Binary(tag),
+                    ..
+                }) => print!("user - binary {}; ", tag),
+                None => {}
+            }
+            match sys_install {
+                Some(DatabaseEntry {
+                    ty: EntryType::GitSource(hash),
+                    ..
+                }) => print!("sys - git {}; ", hash.chars().take(6).collect::<String>()),
+                Some(DatabaseEntry {
+                    ty: EntryType::Binary(tag),
+                    ..
+                }) => print!("sys - binary {}; ", tag),
+                None => {}
+            }
+            print!("]");
+        }
+
+        println!();
     }
 
     println!();

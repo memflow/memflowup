@@ -44,6 +44,17 @@ pub struct Asset {
     pub browser_download_url: String,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Branch {
+    pub name: String,
+    pub commit: Commit,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Commit {
+    pub sha: String,
+}
+
 // TODO: filter for archicture
 #[cfg(not(any(target_os = "windows", target_os = "macos")))]
 fn find_platform_asset<'a>(release: &'a Release) -> Option<&'a Asset> {
@@ -88,6 +99,18 @@ pub fn download_repository_release_latest(group: &str, repository: &str) -> Resu
         }
         None => Err(format!("unable to find a release for {}/{}", group, repository).into()),
     }
+}
+
+pub fn get_branch(url: &str, branch: &str) -> Result<Branch, &'static str> {
+    let url = format!(
+        "{}/branches/{}",
+        url.replace("github.com", "api.github.com/repos"),
+        branch
+    );
+
+    info!("Getting branch from {}", url);
+
+    util::http_get_json(&url)
 }
 
 /// Downloads the given url to the destination file
