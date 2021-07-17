@@ -127,6 +127,27 @@ fn read_to_end<T: Read>(reader: &mut T, len: usize) -> Result<Vec<u8>, &'static 
     Ok(buffer)
 }
 
+pub fn write_with_elevation(
+    path: impl AsRef<Path>,
+    elevate: bool,
+    handler: impl Fn(std::fs::File) -> Result<(), Box<dyn std::error::Error>>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    match std::fs::File::create(&path) {
+        Ok(file) => handler(file),
+        Err(err) => {
+            if err.kind() == std::io::ErrorKind::PermissionDenied && elevate {
+                let dir = make_temp_dir("memflowup_build", &[&path.as_ref().to_string_lossy()])?;
+                let tmp_path = dir.join("tmp_file");
+                let file = std::fs::File::create(&tmp_path)?;
+                handler(file)?;
+                copy_file(&tmp_path, &path, true).map_err(Into::into)
+            } else {
+                Err(err.into())
+            }
+        }
+    }
+}
+
 pub fn zip_unpack(in_buf: &[u8], out_dir: &PathBuf, strip_path: i64) -> Result<(), String> {
     let zip_cursor = std::io::Cursor::new(&in_buf[..]);
     let mut zip_archive = match ZipArchive::new(zip_cursor) {
@@ -224,6 +245,24 @@ pub fn copy_file(
             error!("{}", &err);
             return Err(err);
         }
+    }
+}
+
+pub fn config_dir(system_wide: bool) -> PathBuf {
+    if system_wide {
+        #[cfg(not(windows))]
+        {
+            "/etc/memflowup/".into()
+        }
+        #[cfg(windows)]
+        // TODO: pick a better path
+        {
+            "C:\\memflowup\\{}".into()
+        }
+    } else {
+        let mut path = dirs::config_dir().unwrap();
+        path.push("memflowup");
+        path
     }
 }
 

@@ -1,16 +1,13 @@
 use crate::{database::EntryType, github_api, package::Package, util};
 
-use std::env;
-use std::fs::{self, File};
-use std::io;
-use std::path::{Path, PathBuf};
+use std::fs::File;
+use std::io::Write;
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
-use log::{debug, error, info, warn};
+use log::*;
 
-use rhai::{Dynamic, Engine, EvalAltResult, RegisterFn, RegisterResultFn, Scope};
-
-use zip::ZipArchive;
+use rhai::{Dynamic, Engine, EvalAltResult, Scope};
 
 use std::cell::RefCell;
 
@@ -28,137 +25,6 @@ fn info(s: &str) -> () {
 /// Prints an error
 fn error(s: &str) -> () {
     error!("{}", s);
-}
-
-/// Returns the temp directory
-fn tmp_dir() -> String {
-    env::temp_dir().to_string_lossy().to_string()
-}
-
-// TODO:
-// - function that allows downloading an entire git repository
-// - git submodule manipulation
-// - cargo command
-// - make command
-fn download_zip(url: &str, folder: &str, strip_path: i64) -> Result<Dynamic, Box<EvalAltResult>> {
-    info!(
-        "download zip file from '{}' to '{}'",
-        url.clone(),
-        folder.clone()
-    );
-    let bytes = match util::http_download_file(url) {
-        Ok(b) => b,
-        Err(err) => {
-            error!("{}", err);
-            return Err(err.into());
-        }
-    };
-
-    let zip_cursor = std::io::Cursor::new(&bytes[..]);
-    let mut zip_archive = match ZipArchive::new(zip_cursor) {
-        Ok(archive) => archive,
-        Err(err) => {
-            error!("{:?}", err);
-            return Err(format!("{:?}", err).into());
-        }
-    };
-
-    for i in 0..zip_archive.len() {
-        if let Ok(mut file) = zip_archive.by_index(i) {
-            if let Some(file_path) = file.enclosed_name() {
-                let out_path = if strip_path > 0 {
-                    PathBuf::from(folder).join(
-                        file_path
-                            .iter()
-                            .skip(strip_path as usize)
-                            .collect::<PathBuf>(),
-                    )
-                } else {
-                    PathBuf::from(folder).join(file_path)
-                };
-
-                if file.is_dir() {
-                    fs::create_dir_all(out_path).ok();
-                } else {
-                    debug!("extracing file {:?}", out_path);
-                    let mut outfile = File::create(&out_path).expect("unable to write output file");
-                    io::copy(&mut file, &mut outfile).expect("unable to write output file");
-                }
-            } else {
-                warn!("invalid path in zip file for file: {:?}", file.name());
-            }
-        }
-    }
-
-    Ok(().into())
-}
-
-// TODO: global configuration for binary / source / tag or branch
-fn download_repository(group: &str, repository: &str) -> Result<Dynamic, Box<EvalAltResult>> {
-    let download_binary = true;
-
-    info!("downloading repository {}/{}", group, repository);
-
-    if download_binary {
-        //return download_repository_binary(group, repository);
-    } else {
-        // select appropiate version and download
-    }
-
-    /*
-    info!(
-        "download zip file from '{}' to '{}'",
-        url.clone(),
-        folder.clone()
-    );
-    let bytes = match util::download_file(url) {
-        Ok(b) => b,
-        Err(err) => {
-            error!("{}", err);
-            return Err(err.into());
-        }
-    };
-
-    let zip_cursor = std::io::Cursor::new(&bytes[..]);
-    let mut zip_archive = match ZipArchive::new(zip_cursor) {
-        Ok(archive) => archive,
-        Err(err) => {
-            error!("{:?}", err);
-            return Err(format!("{:?}", err).into());
-        }
-    };
-
-    for i in 0..zip_archive.len() {
-        if let Ok(mut file) = zip_archive.by_index(i) {
-            if let Some(file_path) = file.enclosed_name() {
-                let out_path = if strip_path > 0 {
-                    PathBuf::from(folder).join(
-                        file_path
-                            .iter()
-                            .skip(strip_path as usize)
-                            .collect::<PathBuf>(),
-                    )
-                } else {
-                    PathBuf::from(folder).join(file_path)
-                };
-
-                if file.is_dir() {
-                    fs::create_dir_all(out_path).ok();
-                } else {
-                    debug!("extracing file {:?}", out_path);
-                    let mut outfile = File::create(&out_path).expect("unable to write output file");
-                    io::copy(&mut file, &mut outfile).expect("unable to write output file");
-                }
-            } else {
-                warn!("invalid path in zip file for file: {:?}", file.name());
-            }
-        }
-    }
-
-    Ok(().into())
-    */
-
-    Ok(().into())
 }
 
 /// Executes cargo with the given flags
@@ -186,11 +52,11 @@ fn cargo(args: &str, pwd: &str) -> Result<Dynamic, Box<EvalAltResult>> {
 
 fn name2lib(name: &str) -> String {
     let name = name.replace("-", "_");
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "macos")))]
     {
         format!("lib{}.so", name)
     }
-    #[cfg(macos)]
+    #[cfg(target_os = "macos")]
     {
         format!("lib{}.dylib", name)
     }
@@ -205,8 +71,8 @@ pub struct ScriptCtx<'a> {
     package: &'a Package,
     tmp_dir: &'a util::TempDir,
     dev_branch: bool,
-    installed_local: &'a RefCell<Vec<String>>,
-    installed_system: &'a RefCell<Vec<String>>,
+    system_wide: bool,
+    installed: &'a RefCell<Vec<String>>,
     installed_release: &'a RefCell<Option<EntryType>>,
     sha: &'a str,
 }
@@ -219,6 +85,67 @@ impl<'a> ScriptCtx<'a> {
         info!("download zip file from '{}'", &url,);
 
         util::http_download_file(&url).map_err(Into::into)
+    }
+
+    fn clone_repository(&mut self) -> Result<String, Box<EvalAltResult>> {
+        let mut path: PathBuf = self.tmp_dir.as_path().into();
+
+        let dir = format!("{:x}", CRC.checksum(self.sha.as_bytes()));
+
+        path.push(dir);
+
+        let path_str = path.to_str().ok_or("invalid path generated")?;
+
+        Command::new("git")
+            .args(&[
+                "clone",
+                "--single-branch",
+                "--recursive",
+                "--depth",
+                "1",
+                &self.package.repo_root_url,
+                path_str,
+            ])
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .output()
+            .map_err(|_| "unable to clone repository")?;
+
+        Ok(path_str.into())
+    }
+
+    fn dkms_install(&mut self, path: String) -> Result<(), Box<EvalAltResult>> {
+        Command::new("sudo")
+            .args(&["dkms", "install", &path])
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .output().map_err(|_| "unable to execute DKMS add. DKMS is only available on *nix based systems (but not macOS)")?;
+
+        Ok(())
+    }
+
+    fn dkms_install_tarball(&mut self, bytes: Vec<u8>) -> Result<(), Box<EvalAltResult>> {
+        let mut path: PathBuf = self.tmp_dir.as_path().into();
+
+        let dir = format!("{:x}.tar.dz", CRC.checksum(self.sha.as_bytes()));
+
+        path.push(dir);
+
+        let path_str = path.to_str().ok_or("invalid path generated")?;
+
+        {
+            let mut file = File::create(&path).map_err(|_| "failed to create tarball file")?;
+            file.write_all(&bytes)
+                .map_err(|_| "failed to write the tarball")?;
+        }
+
+        Command::new("sudo")
+            .args(&["dkms", "install", &format!("--archive={}", path_str)])
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .output().map_err(|_| "unable to execute DKMS add. DKMS is only available on *nix based systems (but not macOS)")?;
+
+        Ok(())
     }
 
     fn extract(&mut self, bytes: Vec<u8>) -> Result<String, Box<EvalAltResult>> {
@@ -267,40 +194,27 @@ impl<'a> ScriptCtx<'a> {
             extension
         );
 
-        {
+        let out_path = if !self.system_wide {
             let user_dir = dirs::home_dir()
                 .unwrap()
                 .join(".local")
                 .join("lib")
                 .join("memflow");
-            let out_path = user_dir.join(&out_filename);
-
-            out_path.to_str().ok_or("invalid output path")?;
-
-            util::copy_file(&in_path, &out_path, false)
-                .map_err(|_| "failed to copy to user path")?;
-
-            self.installed_local
-                .try_borrow_mut()
-                .unwrap()
-                .push(out_path.to_str().unwrap().to_string());
-        }
-
-        // TODO: check system install
-        {
+            user_dir.join(&out_filename)
+        } else {
             let system_dir = PathBuf::from("/").join("usr").join("lib").join("memflow");
-            let out_path = system_dir.join(out_filename);
+            system_dir.join(out_filename)
+        };
 
-            out_path.to_str().ok_or("invalid output path")?;
+        out_path.to_str().ok_or("invalid output path")?;
 
-            util::copy_file(&in_path, &out_path, true)
-                .map_err(|_| "failed to copy to system path")?;
+        util::copy_file(&in_path, &out_path, self.system_wide)
+            .map_err(|_| "failed to copy to user path")?;
 
-            self.installed_system
-                .try_borrow_mut()
-                .unwrap()
-                .push(out_path.to_str().unwrap().to_string());
-        }
+        self.installed
+            .try_borrow_mut()
+            .unwrap()
+            .push(out_path.to_str().unwrap().to_string());
 
         Ok(().into())
     }
@@ -324,8 +238,9 @@ impl<'a> ScriptCtx<'a> {
 pub fn execute_installer(
     package: &Package,
     dev_branch: bool,
+    system_wide: bool,
     entrypoint: &str,
-) -> Result<(EntryType, Vec<String>, Vec<String>), Box<dyn std::error::Error>> {
+) -> Result<(EntryType, Vec<String>), Box<dyn std::error::Error>> {
     let tmp_dir = util::make_temp_dir(
         "memflowup_build",
         &[
@@ -335,8 +250,7 @@ pub fn execute_installer(
         ],
     )?;
 
-    let installed_local = RefCell::new(vec![]);
-    let installed_system = RefCell::new(vec![]);
+    let installed = RefCell::new(vec![]);
     let installed_release = RefCell::new(None);
 
     let branch =
@@ -346,8 +260,8 @@ pub fn execute_installer(
         package,
         tmp_dir: &tmp_dir,
         dev_branch,
-        installed_local: &installed_local,
-        installed_system: &installed_system,
+        system_wide,
+        installed: &installed,
         installed_release: &installed_release,
         sha: &branch.commit.sha,
     };
@@ -369,22 +283,19 @@ pub fn execute_installer(
     engine
         .register_type::<ScriptCtx>()
         .register_result_fn("download_repository", ScriptCtx::download_repository)
+        .register_result_fn("clone_repository", ScriptCtx::clone_repository)
         .register_result_fn("extract", ScriptCtx::extract)
         .register_fn("crate_name", ScriptCtx::crate_name)
-        .register_result_fn("copy_cargo_plugin_artifact", ScriptCtx::copy_cargo_plugin_artifact)
+        .register_result_fn(
+            "copy_cargo_plugin_artifact",
+            ScriptCtx::copy_cargo_plugin_artifact,
+        )
+        .register_result_fn("dkms_install", ScriptCtx::dkms_install)
+        .register_result_fn("dkms_install", ScriptCtx::dkms_install_tarball)
         .register_fn("info", info)
         .register_fn("error", error)
         .register_fn("name_to_lib", name2lib)
-        //.register_fn("tmp_dir", tmp_dir)
-        //        .register_fn("tmp_file", tmp_file)
-        //      .register_fn("tmp_folder", tmp_file)
-        //    .register_result_fn("download_file", download_file)
-        //.register_result_fn("download_zip", download_zip)
-        //.register_result_fn("download_repository", download_repository)
-        .register_result_fn("cargo", cargo)
-        //.register_result_fn("copy_file", copy_file)
-        //.register_result_fn("install_connector", install_connector);
-        ;
+        .register_result_fn("cargo", cargo);
 
     let mut scope = Scope::new();
     let ast = engine.compile_with_scope(&mut scope, script).unwrap();
@@ -403,7 +314,6 @@ pub fn execute_installer(
             // TODO: cleanup artifacts
             "Script failed to mark installed release!"
         })?,
-        installed_local.into_inner(),
-        installed_system.into_inner(),
+        installed.into_inner(),
     ))
 }

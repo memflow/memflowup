@@ -117,12 +117,15 @@ fn install_rustup() {
 }
 
 fn install_modules() {
-    let packages = load_packages();
+    let system_wide = false;
+
+    update_index(system_wide).unwrap();
+
+    let packages = load_packages(system_wide).unwrap();
 
     let dev_branch = true;
 
-    let db_user = load_database(dev_branch, false).unwrap();
-    let db_sys = load_database(dev_branch, true).unwrap();
+    let db = load_database(dev_branch, system_wide).unwrap();
 
     println!(
         "using {} channel",
@@ -136,38 +139,24 @@ fn install_modules() {
     for (i, package) in packages
         .iter()
         .filter(|p| p.is_in_channel(dev_branch))
+        .filter(|p| p.supported_by_platform())
         .enumerate()
     {
         print!("{}. {} - {:?}", i, package.name, package.ty);
 
-        let user_install = db_user.get(&package.name);
-        let sys_install = db_sys.get(&package.name);
-
-        if user_install.is_some() || sys_install.is_some() {
-            print!(" [installed: ");
-            match user_install {
-                Some(DatabaseEntry {
-                    ty: EntryType::GitSource(hash),
-                    ..
-                }) => print!("user - git {}; ", hash.chars().take(6).collect::<String>()),
-                Some(DatabaseEntry {
-                    ty: EntryType::Binary(tag),
-                    ..
-                }) => print!("user - binary {}; ", tag),
-                None => {}
-            }
-            match sys_install {
-                Some(DatabaseEntry {
-                    ty: EntryType::GitSource(hash),
-                    ..
-                }) => print!("sys - git {}; ", hash.chars().take(6).collect::<String>()),
-                Some(DatabaseEntry {
-                    ty: EntryType::Binary(tag),
-                    ..
-                }) => print!("sys - binary {}; ", tag),
-                None => {}
-            }
-            print!("]");
+        match db.get(&package.name) {
+            Some(DatabaseEntry {
+                ty: EntryType::GitSource(hash),
+                ..
+            }) => print!(
+                " [installed: git {}]",
+                hash.chars().take(6).collect::<String>()
+            ),
+            Some(DatabaseEntry {
+                ty: EntryType::Binary(tag),
+                ..
+            }) => print!(" [installed: binary {}]", tag),
+            None => {}
         }
 
         println!();
@@ -199,10 +188,11 @@ fn install_modules() {
     packages
         .into_iter()
         .filter(|p| p.is_in_channel(dev_branch))
+        .filter(Package::supported_by_platform)
         .enumerate()
         .filter(|(i, p)| install_all || indices.contains(i) || names.contains(&p.name.as_str()))
         .for_each(|(_, p)| {
             println!("Installing {}", p.name);
-            p.install_source(dev_branch);
+            p.install_source(dev_branch, system_wide);
         });
 }

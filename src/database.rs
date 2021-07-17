@@ -31,24 +31,9 @@ fn dev_string(dev_branch: bool) -> &'static str {
 }
 
 fn db_path(dev_branch: bool, system_db: bool) -> PathBuf {
-    let db_name = format!("db2.{}.json", dev_string(dev_branch));
-
-    if system_db {
-        #[cfg(not(windows))]
-        {
-            format!("/etc/memflowup/{}", db_name).into()
-        }
-        #[cfg(windows)]
-        // TODO: pick a better path
-        {
-            format!("C:\\memflowup\\{}", db_name).into()
-        }
-    } else {
-        let mut path = dirs::config_dir().unwrap();
-        path.push("memflowup");
-        path.push(db_name);
-        path
-    }
+    let mut cfg_dir = util::config_dir(system_db);
+    cfg_dir.push(format!("db2.{}.json", dev_string(dev_branch)));
+    cfg_dir
 }
 
 pub fn load_database(
@@ -84,18 +69,7 @@ pub fn commit_entry(
 
     db.insert(name.to_string(), entry);
 
-    match std::fs::File::create(&path) {
-        Ok(file) => serde_json::to_writer_pretty(file, &db).map_err(Into::into),
-        Err(err) => {
-            if err.kind() == std::io::ErrorKind::PermissionDenied && system_db {
-                let dir = util::make_temp_dir("memflowup_build", &["db.json"])?;
-                let tmp_path = dir.join("db.json");
-                let file = std::fs::File::create(&tmp_path)?;
-                serde_json::to_writer_pretty(file, &db)?;
-                util::copy_file(&tmp_path, &path, true).map_err(Into::into)
-            } else {
-                Err(err.into())
-            }
-        }
-    }
+    util::write_with_elevation(&path, system_db, |writer| {
+        serde_json::to_writer_pretty(writer, &db).map_err(Into::into)
+    })
 }

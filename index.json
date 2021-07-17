@@ -10,6 +10,7 @@
 	{
 		"name": "memflow-qemu-procfs",
 		"ty": "CorePlugin",
+		"platforms": ["linux"],
 		"repo_root_url": "https://github.com/memflow/memflow-qemu-procfs",
 		"stable_branch": "master",
 		"dev_branch": "next"
@@ -23,6 +24,7 @@
 	{
 		"name": "memflow-pcileech",
 		"ty": "CorePlugin",
+		"platforms": ["linux", "windows"],
 		"repo_root_url": "https://github.com/memflow/memflow-pcileech",
 		"stable_branch": "master",
 		"dev_branch": "next",
@@ -31,6 +33,7 @@
 	{
 		"name": "memflow-kvm",
 		"ty": "CorePlugin",
+		"platforms": ["linux"],
 		"repo_root_url": "https://github.com/memflow/memflow-kvm",
 		"stable_branch": "master",
 		"dev_branch": "next",
