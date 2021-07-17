@@ -7,12 +7,14 @@ mod util;
 
 use log::Level;
 
-fn main() {
+pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+
+fn main() -> Result<()> {
     simple_logger::SimpleLogger::new()
         .with_level(Level::Info.to_level_filter())
         .init()
         .unwrap();
 
     // TODO: check if we have cmdline args and only run setup mode in specific cases
-    setup_mode::setup_mode();
+    setup_mode::setup_mode()
 }

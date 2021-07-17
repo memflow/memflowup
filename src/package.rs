@@ -1,6 +1,6 @@
 use serde::*;
 
-use crate::{database, scripting, util};
+use crate::{database, scripting, util, Result};
 
 use std::fs;
 use std::io::Write;
@@ -23,10 +23,9 @@ pub struct Package {
 }
 
 impl Package {
-    pub fn install_source(&self, dev_branch: bool, system_wide: bool) {
+    pub fn install_source(&self, dev_branch: bool, system_wide: bool) -> Result<()> {
         let (ty, artifacts) =
-            scripting::execute_installer(self, dev_branch, system_wide, "build_from_source")
-                .unwrap();
+            scripting::execute_installer(self, dev_branch, system_wide, "build_from_source")?;
 
         database::commit_entry(
             &self.name,
@@ -34,7 +33,6 @@ impl Package {
             dev_branch,
             system_wide,
         )
-        .unwrap();
     }
 
     pub fn supported_by_platform(&self) -> bool {
@@ -81,7 +79,7 @@ pub enum PackageType {
     DaemonPlugin,
 }
 
-pub fn update_index(system_wide: bool) -> Result<(), Box<dyn std::error::Error>> {
+pub fn update_index(system_wide: bool) -> Result<()> {
     let mut path = util::config_dir(system_wide);
     path.push("index");
     path.push("default.json");
@@ -106,12 +104,14 @@ pub fn update_index(system_wide: bool) -> Result<(), Box<dyn std::error::Error>>
         "https://raw.githubusercontent.com/memflow/memflowup/next/index.json",
     )?;
 
+    util::create_dir_with_elevation(path.as_path().parent().unwrap(), system_wide)?;
+
     util::write_with_elevation(path, system_wide, |mut file| {
         file.write_all(&bytes).map_err(Into::into)
     })
 }
 
-pub fn load_packages(system_wide: bool) -> Result<Vec<Package>, Box<dyn std::error::Error>> {
+pub fn load_packages(system_wide: bool) -> Result<Vec<Package>> {
     let mut ret = vec![];
 
     let mut path = util::config_dir(system_wide);

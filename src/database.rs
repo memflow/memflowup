@@ -61,7 +61,7 @@ pub fn commit_entry(
     let mut dir = path.clone();
     dir.pop();
 
-    std::fs::create_dir_all(dir)?;
+    util::create_dir_with_elevation(dir, system_db)?;
 
     let mut db = load_database(dev_branch, system_db)?;
 

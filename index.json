@@ -3,8 +3,8 @@
 		"name": "memflow-ffi",
 		"ty": "Library",
 		"repo_root_url": "https://github.com/memflow/memflow",
-		"stable_branch": "master",
-		"dev_branch": "next",
+		"_stable_branch": "master",
+		"_dev_branch": "next",
 		"install_script_path": "install_ffi.rhai"
 	},
 	{
@@ -26,7 +26,7 @@
 		"ty": "CorePlugin",
 		"platforms": ["linux", "windows"],
 		"repo_root_url": "https://github.com/memflow/memflow-pcileech",
-		"stable_branch": "master",
+		"_stable_branch": "master",
 		"dev_branch": "next",
 		"install_script_path": "install.rhai"
 	},
@@ -35,7 +35,7 @@
 		"ty": "CorePlugin",
 		"platforms": ["linux"],
 		"repo_root_url": "https://github.com/memflow/memflow-kvm",
-		"stable_branch": "master",
+		"_stable_branch": "master",
 		"dev_branch": "next",
 		"install_script_path": "install.rhai"
 	}

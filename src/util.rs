@@ -17,28 +17,51 @@ use crc::{Crc, CRC_64_GO_ISO};
 
 const CRC: Crc<u64> = Crc::<u64>::new(&CRC_64_GO_ISO);
 
-pub fn user_input_boolean(question: &str, default: bool) -> bool {
+pub fn user_input_boolean(question: &str, default: bool) -> crate::Result<bool> {
+    user_input(question, &["y", "n"], !default as usize).map(|r| r == 0)
+}
+
+pub fn user_input(question: &str, options: &[&str], default: usize) -> crate::Result<usize> {
     loop {
         print!("{}", question);
-        if default {
-            print!(" [Y/n]: ");
-        } else {
-            print!(" [y/N]: ");
+
+        print!(" [");
+
+        for (i, option) in options.iter().enumerate() {
+            if i != 0 {
+                print!("/");
+            }
+
+            if i == default {
+                print!("{}", option.to_uppercase());
+            } else {
+                print!("{}", option);
+            }
         }
+
+        print!("]: ");
+
         io::stdout().flush().ok();
 
         let mut input = String::new();
         io::stdin()
             .read_line(&mut input)
             .expect("Failed to read from stdin");
-        let input_stripped = input.strip_suffix('\n').unwrap_or_default().to_lowercase();
+        let input_stripped = input.trim().to_lowercase();
 
         if input_stripped.is_empty() {
-            return default;
-        } else if input_stripped.starts_with('y') {
-            return true;
-        } else if input_stripped.starts_with('n') {
-            return false;
+            return Ok(default);
+        } else {
+            let mut iter = options
+                .iter()
+                .enumerate()
+                .filter(|(_, o)| o.to_lowercase().starts_with(&input_stripped));
+
+            // Return only if there's just a single starts_with match
+            match (iter.next(), iter.next()) {
+                (Some((i, _)), None) => return Ok(i),
+                _ => {}
+            }
         }
     }
 }
@@ -125,6 +148,35 @@ fn read_to_end<T: Read>(reader: &mut T, len: usize) -> Result<Vec<u8>, &'static 
     thread.join().unwrap();
 
     Ok(buffer)
+}
+
+pub fn create_dir_with_elevation(path: impl AsRef<Path>, elevate: bool) -> crate::Result<()> {
+    match std::fs::create_dir_all(&path) {
+        Ok(_) => Ok(()),
+        Err(err) => {
+            if err.kind() == std::io::ErrorKind::PermissionDenied && elevate {
+                let path_str = path
+                    .as_ref()
+                    .to_str()
+                    .ok_or("directory contains invalid characters!")?;
+                info!("Elevated mkdir {}", path_str);
+                match Command::new("sudo")
+                    .args(&["mkdir", "-p", path_str])
+                    .stdout(Stdio::inherit())
+                    .stderr(Stdio::inherit())
+                    .output()
+                {
+                    Ok(_) => return Ok(()),
+                    Err(err) => {
+                        error!("{}", err);
+                        Err(err.into())
+                    }
+                }
+            } else {
+                Err(err.into())
+            }
+        }
+    }
 }
 
 pub fn write_with_elevation(

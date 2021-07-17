@@ -13,6 +13,8 @@ use log::{info, warn};
 
 use crate::package::*;
 
+use crate::Result;
+
 #[cfg(not(any(target_os = "windows", target_os = "macos")))]
 fn install_paths() -> Vec<PathBuf> {
     vec![
@@ -34,28 +36,30 @@ fn install_paths() -> Vec<PathBuf> {
     ]
 }
 
-pub fn setup_mode() {
+pub fn setup_mode() -> Result<()> {
     // 1. ensure rustup / cargo is installed in PATH
-    ensure_rust();
+    ensure_rust()?;
 
     // 2. install memflowup in PATH
 
     // 3. install default set of connectors for the current platform
-    install_modules();
+    install_modules()
 }
 
-fn ensure_rust() {
+fn ensure_rust() -> Result<()> {
     match which::which("cargo") {
         Ok(cargo_dir) => {
             info!("cargo found at {:?}", cargo_dir);
+            Ok(())
         }
         Err(_) => {
             warn!("cargo not found");
-            if util::user_input_boolean("do you want memflowup to install rust via rustup?", true) {
+            if util::user_input_boolean("do you want memflowup to install rust via rustup?", true)?
+            {
                 info!("cargo not found, installing via rustup");
-                install_rust();
+                install_rust()
             } else {
-                panic!("rust/cargo not found. please install it manually.");
+                Err("rust/cargo not found. please install it manually.".into())
             }
         }
     }
@@ -63,21 +67,21 @@ fn ensure_rust() {
 
 // TODO: windows / mac support
 /// Downloads and executes rustup or panics
-fn install_rust() {
+fn install_rust() -> Result<()> {
     match which::which("rustup") {
         Ok(rustup_path) => {
             info!("rustup found at {:?}", rustup_path);
-            install_rust_toolchain(rustup_path);
+            install_rust_toolchain(rustup_path)
         }
         Err(_) => {
             warn!("rustup is not installed, trying to download");
-            install_rustup();
+            install_rustup()
         }
     }
 }
 
 // TODO: windows / mac support
-fn install_rust_toolchain<P: AsRef<OsStr>>(path: P) {
+fn install_rust_toolchain<P: AsRef<OsStr>>(path: P) -> Result<()> {
     Command::new(path)
         .arg("toolchain")
         .arg("install")
@@ -86,16 +90,18 @@ fn install_rust_toolchain<P: AsRef<OsStr>>(path: P) {
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .output()
-        .expect("failed to install stable toolchain via rustup");
+        .map_err(|_| "failed to install stable toolchain via rustup")?;
+
+    Ok(())
 }
 
-fn install_rustup() {
+fn install_rustup() -> Result<()> {
     let mut rustup_path = env::temp_dir();
     rustup_path.push("rustup.sh");
-    let rustup_script =
-        util::http_download_file("https://sh.rustup.rs").expect("unable to download rustup script");
-    fs::write(rustup_path.clone(), rustup_script)
-        .expect("unable to write rustup script to temp directory");
+
+    let rustup_script = util::http_download_file("https://sh.rustup.rs")?;
+
+    fs::write(rustup_path.clone(), rustup_script)?;
 
     // TODO: use libc here
     Command::new("chmod")
@@ -103,8 +109,7 @@ fn install_rustup() {
         .arg(rustup_path.clone())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
-        .output()
-        .expect("failed to set permission for rustup script");
+        .output()?;
 
     Command::new("sh")
         .arg("-c")
@@ -112,20 +117,31 @@ fn install_rustup() {
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
-        .output()
-        .expect("failed to execute rustup script");
+        .output()?;
+
+    Ok(())
 }
 
-fn install_modules() {
-    let system_wide = false;
+fn install_modules() -> Result<()> {
+    println!("Installing initial packages. You can always re-run memflowup to install additional packages, or to different paths.");
 
-    update_index(system_wide).unwrap();
+    let system_wide = util::user_input_boolean(
+        "do you want to install the initial packages system-wide?",
+        true,
+    )?;
 
-    let packages = load_packages(system_wide).unwrap();
+    update_index(system_wide)?;
 
-    let dev_branch = true;
+    let packages = load_packages(system_wide)?;
 
-    let db = load_database(dev_branch, system_wide).unwrap();
+    let dev_branch = util::user_input(
+        "which channel do you want to use?",
+        &["stable", "development"],
+        0,
+    )
+    .map(|r| r != 0)?;
+
+    let db = load_database(dev_branch, system_wide)?;
 
     println!(
         "using {} channel",
@@ -182,17 +198,21 @@ fn install_modules() {
     let indices = indices
         .into_iter()
         .map(str::parse::<usize>)
-        .map(Result::unwrap)
+        .map(std::result::Result::unwrap)
         .collect::<Vec<_>>();
 
-    packages
+    for (_, p) in packages
         .into_iter()
         .filter(|p| p.is_in_channel(dev_branch))
         .filter(Package::supported_by_platform)
         .enumerate()
         .filter(|(i, p)| install_all || indices.contains(i) || names.contains(&p.name.as_str()))
-        .for_each(|(_, p)| {
-            println!("Installing {}", p.name);
-            p.install_source(dev_branch, system_wide);
-        });
+    {
+        println!("Installing {}", p.name);
+        p.install_source(dev_branch, system_wide)?;
+    }
+
+    println!("Initial setup done!");
+
+    Ok(())
 }
