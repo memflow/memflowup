@@ -36,6 +36,7 @@ fn main() -> Result<()> {
             matches.value_of("type").unwrap(),
             matches.occurrences_of("unsafe") > 0,
             matches.occurrences_of("sys") > 0,
+            matches.occurrences_of("nocopy") > 0,
         ),
         _ => setup_mode::setup_mode(),
     }
@@ -94,6 +95,12 @@ fn parse_args() -> ArgMatches<'static> {
                     Arg::with_name("sys")
                         .long("sys")
                         .short("g")
+                        .takes_value(false)
+                        .required(false),
+                )
+                .arg(
+                    Arg::with_name("nocopy")
+                        .long("nocopy")
                         .takes_value(false)
                         .required(false),
                 ),

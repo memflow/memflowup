@@ -22,6 +22,7 @@ pub fn build(
     ty: &str,
     unsafe_commands: bool,
     system_wide: bool,
+    nocopy: bool,
 ) -> Result<()> {
     let ty = match ty {
         "core_plugin" | "core" => PackageType::CorePlugin,
@@ -35,7 +36,6 @@ pub fn build(
         name: name.into(),
         repo_root_url: path.into(),
         install_script_path: script.map(<_>::into),
-        is_local: true,
         unsafe_commands,
         ty,
         dev_branch: None,
@@ -43,7 +43,13 @@ pub fn build(
         platforms: None,
     };
 
-    package.install_local(system_wide)?;
+    let opts = PackageOpts {
+        is_local: true,
+        nocopy,
+        system_wide,
+    };
+
+    package.install_local(&opts)?;
 
     Ok(())
 }

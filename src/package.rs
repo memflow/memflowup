@@ -21,32 +21,46 @@ pub struct Package {
     #[serde(default)]
     pub unsafe_commands: bool,
     pub install_script_path: Option<String>,
-    #[serde(default)]
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct PackageOpts {
     pub is_local: bool,
+    pub nocopy: bool,
+    pub system_wide: bool,
+}
+
+impl PackageOpts {
+    pub fn system_wide(system_wide: bool) -> Self {
+        Self {
+            system_wide,
+            ..Default::default()
+        }
+    }
 }
 
 impl Package {
-    pub fn install_source(&self, branch: Branch, system_wide: bool) -> Result<()> {
+    pub fn install_source(&self, branch: Branch, opts: &PackageOpts) -> Result<()> {
         let (ty, artifacts) =
-            scripting::execute_installer(self, branch, system_wide, "build_from_source")?;
+            scripting::execute_installer(self, opts, branch, "build_from_source")?;
 
         database::commit_entry(
             &self.name,
             database::DatabaseEntry { ty, artifacts },
             branch,
-            system_wide,
+            opts.system_wide,
         )
     }
 
-    pub fn install_local(&self, system_wide: bool) -> Result<()> {
+    pub fn install_local(&self, opts: &PackageOpts) -> Result<()> {
         let (ty, artifacts) =
-            scripting::execute_installer(self, Branch::Local, system_wide, "build_local")?;
+            scripting::execute_installer(self, opts, Branch::Local, "build_local")?;
 
         database::commit_entry(
             &self.name,
             database::DatabaseEntry { ty, artifacts },
             Branch::Local,
-            system_wide,
+            opts.system_wide,
         )
     }
 

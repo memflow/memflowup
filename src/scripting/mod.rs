@@ -1,7 +1,7 @@
 use crate::{
     database::{Branch, EntryType},
     github_api,
-    package::Package,
+    package::{Package, PackageOpts},
     util,
 };
 
@@ -71,12 +71,38 @@ fn name2lib(name: &str) -> String {
     }
 }
 
+fn name2lib_with_arch(name: &str) -> String {
+    name2lib(&format!("{}.{}", name, arch_str()))
+}
+
+macro_rules! cfg_arch {
+    ($arch:expr) => {
+        #[cfg(target_arch = $arch)]
+        {
+            return $arch;
+        }
+    };
+}
+
+fn arch_str() -> &'static str {
+    cfg_arch!("x86_64");
+    cfg_arch!("x86");
+    cfg_arch!("aarch64");
+    cfg_arch!("arm");
+    cfg_arch!("wasm32");
+    cfg_arch!("mips64");
+    cfg_arch!("mips");
+    cfg_arch!("powerpc64");
+    cfg_arch!("powerpc");
+    cfg_arch!("nvptx");
+}
+
 #[derive(Clone, Copy)]
 pub struct ScriptCtx<'a> {
     package: &'a Package,
+    opts: &'a PackageOpts,
     tmp_dir: &'a PathBuf,
     branch: Branch,
-    system_wide: bool,
     installed: &'a RefCell<Vec<String>>,
     installed_release: &'a RefCell<Option<EntryType>>,
     sha: &'a str,
@@ -180,7 +206,7 @@ impl<'a> ScriptCtx<'a> {
         artifact: &str,
     ) -> Result<(), Box<EvalAltResult>> {
         // Mark that we did source installation:
-        *self.installed_release.try_borrow_mut().unwrap() = Some(if self.package.is_local {
+        *self.installed_release.try_borrow_mut().unwrap() = Some(if self.opts.is_local {
             EntryType::LocalPath(self.package.repo_root_url.clone())
         } else {
             EntryType::GitSource(self.sha.into())
@@ -199,29 +225,38 @@ impl<'a> ScriptCtx<'a> {
             .extension()
             .and_then(|s| s.to_str())
             .ok_or("malformed extension")?;
-        let out_filename = format!("{}.{}.{}", stem, self.branch.filename(), extension);
 
-        let out_path = if !self.system_wide {
-            let user_dir = dirs::home_dir()
-                .unwrap()
-                .join(".local")
-                .join("lib")
-                .join("memflow");
-            user_dir.join(&out_filename)
+        let out_filename = if self.opts.is_local {
+            format!("{}.{}.{}", stem, arch_str(), extension)
         } else {
-            let system_dir = PathBuf::from("/").join("usr").join("lib").join("memflow");
-            system_dir.join(out_filename)
+            format!("{}.{}.{}", stem, self.branch.filename(), extension)
         };
 
-        out_path.to_str().ok_or("invalid output path")?;
+        if self.opts.nocopy {
+            info!("{}", out_filename);
+        } else {
+            let out_path = if !self.opts.system_wide {
+                let user_dir = dirs::home_dir()
+                    .unwrap()
+                    .join(".local")
+                    .join("lib")
+                    .join("memflow");
+                user_dir.join(&out_filename)
+            } else {
+                let system_dir = PathBuf::from("/").join("usr").join("lib").join("memflow");
+                system_dir.join(out_filename)
+            };
 
-        util::copy_file(&in_path, &out_path, self.system_wide)
-            .map_err(|_| "failed to copy to user path")?;
+            out_path.to_str().ok_or("invalid output path")?;
 
-        self.installed
-            .try_borrow_mut()
-            .unwrap()
-            .push(out_path.to_str().unwrap().to_string());
+            util::copy_file(&in_path, &out_path, self.opts.system_wide)
+                .map_err(|_| "failed to copy to user path")?;
+
+            self.installed
+                .try_borrow_mut()
+                .unwrap()
+                .push(out_path.to_str().unwrap().to_string());
+        }
 
         Ok(().into())
     }
@@ -244,12 +279,12 @@ impl<'a> ScriptCtx<'a> {
 
 pub fn execute_installer(
     package: &Package,
+    opts: &PackageOpts,
     branch: Branch,
-    system_wide: bool,
     entrypoint: &str,
 ) -> Result<(EntryType, Vec<String>), Box<dyn std::error::Error>> {
     // if local, use package path
-    let (tmp_dir, local_dir) = if package.is_local {
+    let (tmp_dir, local_dir) = if opts.is_local {
         (None, Some(PathBuf::from(&package.repo_root_url)))
     } else {
         (
@@ -267,7 +302,7 @@ pub fn execute_installer(
     let installed_release = RefCell::new(None);
 
     // if local, use LOCAL hash
-    let sha = if package.is_local {
+    let sha = if opts.is_local {
         "LOCAL".to_string()
     } else {
         let branch =
@@ -277,9 +312,9 @@ pub fn execute_installer(
 
     let ctx = ScriptCtx {
         package,
+        opts,
         tmp_dir,
         branch,
-        system_wide,
         installed: &installed,
         installed_release: &installed_release,
         sha: &sha,
@@ -287,7 +322,7 @@ pub fn execute_installer(
 
     // if local, do not download the script
     let download_script = if let Some(path) = &package.install_script_path {
-        if package.is_local {
+        if opts.is_local {
             Some(
                 github_api::download_raw(&package.repo_root_url, &sha, &path)
                     .map(|b| String::from_utf8_lossy(&b).to_string())?,
@@ -324,6 +359,7 @@ pub fn execute_installer(
         .register_fn("info", info)
         .register_fn("error", error)
         .register_fn("name_to_lib", name2lib)
+        .register_fn("name_to_lib_with_arch", name2lib_with_arch)
         .register_result_fn("cargo", cargo);
 
     let mut scope = Scope::new();

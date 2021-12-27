@@ -211,7 +211,7 @@ fn install_modules() -> Result<()> {
         .filter(|(i, p)| install_all || indices.contains(i) || names.contains(&p.name.as_str()))
     {
         println!("Installing {}", p.name);
-        p.install_source(branch, system_wide)?;
+        p.install_source(branch, &PackageOpts::system_wide(system_wide))?;
     }
 
     println!("Initial setup done!");
