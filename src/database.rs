@@ -20,24 +20,45 @@ pub enum EntryType {
     GitSource(String),
     /// Release tag
     Binary(String),
+    /// Local path
+    LocalPath(String),
 }
 
-fn dev_string(dev_branch: bool) -> &'static str {
-    if dev_branch {
-        "dev"
-    } else {
-        "stable"
+#[derive(Clone, Copy, Serialize, Deserialize)]
+pub enum Branch {
+    Dev,
+    Stable,
+    Local,
+}
+
+impl Branch {
+    pub fn filename(&self) -> &'static str {
+        match self {
+            Branch::Dev => "dev",
+            Branch::Stable => "stable",
+            Branch::Local => "local",
+        }
     }
 }
 
-fn db_path(dev_branch: bool, system_db: bool) -> PathBuf {
+impl From<bool> for Branch {
+    fn from(dev: bool) -> Self {
+        if dev {
+            Self::Dev
+        } else {
+            Self::Stable
+        }
+    }
+}
+
+fn db_path(dev_branch: Branch, system_db: bool) -> PathBuf {
     let mut cfg_dir = util::config_dir(system_db);
-    cfg_dir.push(format!("db2.{}.json", dev_string(dev_branch)));
+    cfg_dir.push(format!("db2.{}.json", dev_branch.filename()));
     cfg_dir
 }
 
 pub fn load_database(
-    dev_branch: bool,
+    dev_branch: Branch,
     system_db: bool,
 ) -> Result<HashMap<String, DatabaseEntry>, serde_json::Error> {
     let path = db_path(dev_branch, system_db);
@@ -53,7 +74,7 @@ pub fn load_database(
 pub fn commit_entry(
     name: &str,
     entry: DatabaseEntry,
-    dev_branch: bool,
+    dev_branch: Branch,
     system_db: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let path = db_path(dev_branch, system_db);

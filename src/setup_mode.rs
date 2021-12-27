@@ -134,19 +134,17 @@ fn install_modules() -> Result<()> {
 
     let packages = load_packages(system_wide)?;
 
-    let dev_branch = util::user_input(
+    let branch = util::user_input(
         "which channel do you want to use?",
         &["stable", "development"],
         0,
     )
-    .map(|r| r != 0)?;
+    .map(|r| r != 0)
+    .map(<_>::into)?;
 
-    let db = load_database(dev_branch, system_wide)?;
+    let db = load_database(branch, system_wide)?;
 
-    println!(
-        "using {} channel",
-        if dev_branch { "dev" } else { "stable" }
-    );
+    println!("using {} channel", branch.filename());
 
     println!();
 
@@ -154,7 +152,7 @@ fn install_modules() -> Result<()> {
 
     for (i, package) in packages
         .iter()
-        .filter(|p| p.is_in_channel(dev_branch))
+        .filter(|p| p.is_in_channel(branch))
         .filter(|p| p.supported_by_platform())
         .enumerate()
     {
@@ -172,6 +170,10 @@ fn install_modules() -> Result<()> {
                 ty: EntryType::Binary(tag),
                 ..
             }) => print!(" [installed: binary {}]", tag),
+            Some(DatabaseEntry {
+                ty: EntryType::LocalPath(tag),
+                ..
+            }) => print!(" [installed: path {}]", tag),
             None => {}
         }
 
@@ -203,13 +205,13 @@ fn install_modules() -> Result<()> {
 
     for (_, p) in packages
         .into_iter()
-        .filter(|p| p.is_in_channel(dev_branch))
+        .filter(|p| p.is_in_channel(branch))
         .filter(Package::supported_by_platform)
         .enumerate()
         .filter(|(i, p)| install_all || indices.contains(i) || names.contains(&p.name.as_str()))
     {
         println!("Installing {}", p.name);
-        p.install_source(dev_branch, system_wide)?;
+        p.install_source(branch, system_wide)?;
     }
 
     println!("Initial setup done!");

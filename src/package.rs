@@ -1,6 +1,7 @@
 use serde::*;
 
 use crate::{database, scripting, util, Result};
+use database::Branch;
 
 use std::fs;
 use std::io::Write;
@@ -20,17 +21,31 @@ pub struct Package {
     #[serde(default)]
     pub unsafe_commands: bool,
     pub install_script_path: Option<String>,
+    #[serde(default)]
+    pub is_local: bool,
 }
 
 impl Package {
-    pub fn install_source(&self, dev_branch: bool, system_wide: bool) -> Result<()> {
+    pub fn install_source(&self, branch: Branch, system_wide: bool) -> Result<()> {
         let (ty, artifacts) =
-            scripting::execute_installer(self, dev_branch, system_wide, "build_from_source")?;
+            scripting::execute_installer(self, branch, system_wide, "build_from_source")?;
 
         database::commit_entry(
             &self.name,
             database::DatabaseEntry { ty, artifacts },
-            dev_branch,
+            branch,
+            system_wide,
+        )
+    }
+
+    pub fn install_local(&self, system_wide: bool) -> Result<()> {
+        let (ty, artifacts) =
+            scripting::execute_installer(self, Branch::Local, system_wide, "build_local")?;
+
+        database::commit_entry(
+            &self.name,
+            database::DatabaseEntry { ty, artifacts },
+            Branch::Local,
             system_wide,
         )
     }
@@ -58,15 +73,15 @@ impl Package {
         }
     }
 
-    pub fn is_in_channel(&self, dev_branch: bool) -> bool {
-        self.branch(dev_branch).is_some()
+    pub fn is_in_channel(&self, branch: Branch) -> bool {
+        self.branch(branch).is_some()
     }
 
-    pub fn branch(&self, dev_branch: bool) -> Option<&str> {
-        if dev_branch {
-            self.dev_branch.as_deref()
-        } else {
-            self.stable_branch.as_deref()
+    pub fn branch(&self, branch: Branch) -> Option<&str> {
+        match branch {
+            Branch::Dev => self.dev_branch.as_deref(),
+            Branch::Stable => self.stable_branch.as_deref(),
+            _ => None,
         }
     }
 }

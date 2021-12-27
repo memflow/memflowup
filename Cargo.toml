@@ -9,6 +9,7 @@ edition = "2018"
 log = { version = "0.4", default-features = false }
 simple_logger = "1.9"
 rhai = "0.19"
+clap = "2"
 
 # scripts
 which = "4.0.2"

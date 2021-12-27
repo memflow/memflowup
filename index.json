@@ -8,10 +8,23 @@
 		"install_script_path": "install_ffi.rhai"
 	},
 	{
-		"name": "memflow-qemu-procfs",
+		"name": "memflow-win32",
 		"ty": "CorePlugin",
-		"platforms": ["linux"],
-		"repo_root_url": "https://github.com/memflow/memflow-qemu-procfs",
+		"repo_root_url": "https://github.com/memflow/memflow-win32",
+		"dev_branch": "main"
+	},
+	{
+		"name": "memflow-native",
+		"ty": "CorePlugin",
+		"platforms": ["linux", "windows"],
+		"repo_root_url": "https://github.com/memflow/memflow-native",
+		"dev_branch": "main"
+	},
+	{
+		"name": "memflow-qemu",
+		"ty": "CorePlugin",
+		"platforms": ["linux", "windows"],
+		"repo_root_url": "https://github.com/memflow/memflow-qemu",
 		"stable_branch": "master",
 		"dev_branch": "next"
 	},

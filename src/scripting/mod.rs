@@ -1,4 +1,9 @@
-use crate::{database::EntryType, github_api, package::Package, util};
+use crate::{
+    database::{Branch, EntryType},
+    github_api,
+    package::Package,
+    util,
+};
 
 use std::fs::File;
 use std::io::Write;
@@ -69,8 +74,8 @@ fn name2lib(name: &str) -> String {
 #[derive(Clone, Copy)]
 pub struct ScriptCtx<'a> {
     package: &'a Package,
-    tmp_dir: &'a util::TempDir,
-    dev_branch: bool,
+    tmp_dir: &'a PathBuf,
+    branch: Branch,
     system_wide: bool,
     installed: &'a RefCell<Vec<String>>,
     installed_release: &'a RefCell<Option<EntryType>>,
@@ -165,14 +170,21 @@ impl<'a> ScriptCtx<'a> {
         self.package.name.clone()
     }
 
+    fn build_path(&mut self) -> String {
+        self.tmp_dir.to_str().unwrap().to_string()
+    }
+
     fn copy_cargo_plugin_artifact(
         &mut self,
         path: &str,
         artifact: &str,
     ) -> Result<(), Box<EvalAltResult>> {
         // Mark that we did source installation:
-        *self.installed_release.try_borrow_mut().unwrap() =
-            Some(EntryType::GitSource(self.sha.into()));
+        *self.installed_release.try_borrow_mut().unwrap() = Some(if self.package.is_local {
+            EntryType::LocalPath(self.package.repo_root_url.clone())
+        } else {
+            EntryType::GitSource(self.sha.into())
+        });
 
         let mut in_path = PathBuf::from(path);
         in_path.push("target");
@@ -187,12 +199,7 @@ impl<'a> ScriptCtx<'a> {
             .extension()
             .and_then(|s| s.to_str())
             .ok_or("malformed extension")?;
-        let out_filename = format!(
-            "{}.{}.{}",
-            stem,
-            if self.dev_branch { "dev" } else { "stable" },
-            extension
-        );
+        let out_filename = format!("{}.{}.{}", stem, self.branch.filename(), extension);
 
         let out_path = if !self.system_wide {
             let user_dir = dirs::home_dir()
@@ -237,40 +244,61 @@ impl<'a> ScriptCtx<'a> {
 
 pub fn execute_installer(
     package: &Package,
-    dev_branch: bool,
+    branch: Branch,
     system_wide: bool,
     entrypoint: &str,
 ) -> Result<(EntryType, Vec<String>), Box<dyn std::error::Error>> {
-    let tmp_dir = util::make_temp_dir(
-        "memflowup_build",
-        &[
-            &package.name,
-            entrypoint,
-            package.branch(dev_branch).unwrap(),
-        ],
-    )?;
+    // if local, use package path
+    let (tmp_dir, local_dir) = if package.is_local {
+        (None, Some(PathBuf::from(&package.repo_root_url)))
+    } else {
+        (
+            Some(util::make_temp_dir(
+                "memflowup_build",
+                &[&package.name, entrypoint, package.branch(branch).unwrap()],
+            )?),
+            None,
+        )
+    };
+
+    let tmp_dir = tmp_dir.as_deref().or(local_dir.as_ref()).unwrap();
 
     let installed = RefCell::new(vec![]);
     let installed_release = RefCell::new(None);
 
-    let branch =
-        github_api::get_branch(&package.repo_root_url, package.branch(dev_branch).unwrap())?;
+    // if local, use LOCAL hash
+    let sha = if package.is_local {
+        "LOCAL".to_string()
+    } else {
+        let branch =
+            github_api::get_branch(&package.repo_root_url, package.branch(branch).unwrap())?;
+        branch.commit.sha
+    };
 
     let ctx = ScriptCtx {
         package,
-        tmp_dir: &tmp_dir,
-        dev_branch,
+        tmp_dir,
+        branch,
         system_wide,
         installed: &installed,
         installed_release: &installed_release,
-        sha: &branch.commit.sha,
+        sha: &sha,
     };
 
+    // if local, do not download the script
     let download_script = if let Some(path) = &package.install_script_path {
-        Some(
-            github_api::download_raw(&package.repo_root_url, &branch.commit.sha, &path)
-                .map(|b| String::from_utf8_lossy(&b).to_string())?,
-        )
+        if package.is_local {
+            Some(
+                github_api::download_raw(&package.repo_root_url, &sha, &path)
+                    .map(|b| String::from_utf8_lossy(&b).to_string())?,
+            )
+        } else {
+            Some({
+                let mut path_buf = tmp_dir.clone();
+                path_buf.push(&path);
+                std::fs::read_to_string(path_buf)?
+            })
+        }
     } else {
         None
     };
@@ -286,6 +314,7 @@ pub fn execute_installer(
         .register_result_fn("clone_repository", ScriptCtx::clone_repository)
         .register_result_fn("extract", ScriptCtx::extract)
         .register_fn("crate_name", ScriptCtx::crate_name)
+        .register_fn("build_path", ScriptCtx::build_path)
         .register_result_fn(
             "copy_cargo_plugin_artifact",
             ScriptCtx::copy_cargo_plugin_artifact,
