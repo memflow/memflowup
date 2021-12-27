@@ -10,6 +10,10 @@ fn build_local(ctx) {
 	build_from_path(ctx, ctx.build_path())
 }
 
+fn get_source(ctx) {
+	ctx.extract(ctx.download_repository())
+}
+
 // builds the connector from source (github)
 fn build_from_source(ctx) {
 	build_from_path(ctx, get_source(ctx))
