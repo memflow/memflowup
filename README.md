@@ -1,39 +1,42 @@
-# memflow connector setup script
+# memflow setup tool
 
-Requires Python.
+This tool is meant to provide a really quick way to setup various memflow connectors, OS layers, utilities, and more.
 
-This script is meant to provide a really quick way to setup various memflow connectors. Currently, it only supports installing connectors, and lacks features such as kernel module support, but it is to be expanded upon.
+Install through cargo:
 
-Run `curl -L https://raw.githubusercontent.com/memflow/memflowup/master/memflowup.py | python3` for interactive installation.
+```
+cargo install memflowup
+```
 
 ## Usage
+
+See help:
+
+```
+memflowup -h
+```
 
 Run interactively:
 
 ```
-./memflowup.py
+memflowup interactive
 ```
 
 Install a set of connectors non-interactively:
 
 ```
-./memflowup.py install memflow-qemu-procfs memflow-coredump
+memflowup install memflow-qemu-procfs memflow-coredump
 ```
 
 Update all connectors:
 
 ```
-./memflowup.py update
+TODO: NOT YET IMPLEMENTED
 ```
 
 Reinstall all connectors:
 
 ```
-./memflowup.py update -f
+TODO: NOT YET IMPLEMENTED
 ```
 
-Update all connectors and install a system-wide connector (only Unix supports system-wide installation):
-
-```
-./memflowup.py sys update install memflow-kvm
-```
