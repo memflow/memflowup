@@ -157,7 +157,7 @@ pub fn update_index(system_wide: bool) -> Result<()> {
 
     // TODO: switch this to main branch when publishing
     let bytes = util::http_download_file(
-        "https://raw.githubusercontent.com/memflow/memflowup/next/index.json",
+        "https://raw.githubusercontent.com/memflow/memflowup/main/index.json",
     )?;
 
     util::create_dir_with_elevation(path.as_path().parent().unwrap(), system_wide)?;
