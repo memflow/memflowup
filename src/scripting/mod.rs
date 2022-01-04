@@ -235,17 +235,11 @@ impl<'a> ScriptCtx<'a> {
         if self.opts.nocopy {
             info!("{}", out_filename);
         } else {
-            let out_path = if !self.opts.system_wide {
-                let user_dir = dirs::home_dir()
-                    .unwrap()
-                    .join(".local")
-                    .join("lib")
-                    .join("memflow");
-                user_dir.join(&out_filename)
-            } else {
-                let system_dir = PathBuf::from("/").join("usr").join("lib").join("memflow");
-                system_dir.join(out_filename)
-            };
+            let out_path = self
+                .package
+                .ty
+                .install_path(self.opts.system_wide)
+                .join(out_filename);
 
             out_path.to_str().ok_or("invalid output path")?;
 

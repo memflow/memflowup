@@ -1,6 +1,7 @@
 mod build_mode;
 mod database;
 mod github_api;
+mod oneshot;
 mod package;
 mod scripting;
 mod setup_mode;
@@ -38,6 +39,11 @@ fn main() -> Result<()> {
             matches.occurrences_of("sys") > 0,
             matches.occurrences_of("nocopy") > 0,
         ),
+        ("install", Some(matches)) => oneshot::install(
+            &matches.values_of_lossy("packages").unwrap(),
+            matches.occurrences_of("system") > 0,
+            matches.occurrences_of("dev") > 0,
+        ),
         _ => setup_mode::setup_mode(),
     }
 }
@@ -48,9 +54,17 @@ fn parse_args() -> ArgMatches<'static> {
         .author(crate_authors!())
         .arg(Arg::with_name("verbose").short("v").multiple(true))
         .subcommand(
+            SubCommand::with_name("install")
+                .about("Single-shot install")
+                .visible_aliases(&["install", "i"])
+                .arg(Arg::with_name("system").long("system").short("s"))
+                .arg(Arg::with_name("dev").long("dev").short("d"))
+                .arg(Arg::with_name("packages").required(true).multiple(true)),
+        )
+        .subcommand(
             SubCommand::with_name("interactive")
                 .about("Interactive install")
-                .visible_aliases(&["interactive", "i"]),
+                .visible_aliases(&["interactive", "I"]),
         )
         .subcommand(
             SubCommand::with_name("build")

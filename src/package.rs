@@ -5,6 +5,7 @@ use database::Branch;
 
 use std::fs;
 use std::io::Write;
+use std::path::PathBuf;
 
 use log::*;
 
@@ -106,6 +107,32 @@ pub enum PackageType {
     Utility,
     Library,
     DaemonPlugin,
+}
+
+impl PackageType {
+    pub fn install_path(&self, system_wide: bool) -> PathBuf {
+        match *self {
+            PackageType::CorePlugin if system_wide => {
+                if cfg!(unix) {
+                    PathBuf::from("/").join("usr").join("lib").join("memflow")
+                } else {
+                    PathBuf::from("C:\\").join("Program Files").join("memflow")
+                }
+            }
+            PackageType::CorePlugin => {
+                if cfg!(unix) {
+                    dirs::home_dir()
+                        .unwrap()
+                        .join(".local")
+                        .join("lib")
+                        .join("memflow")
+                } else {
+                    dirs::document_dir().unwrap().join("memflow")
+                }
+            }
+            p => unreachable!("package type {:?} is unsupported!", p),
+        }
+    }
 }
 
 pub fn update_index(system_wide: bool) -> Result<()> {

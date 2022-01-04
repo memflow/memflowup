@@ -22,6 +22,8 @@ pub enum EntryType {
     Binary(String),
     /// Local path
     LocalPath(String),
+    /// Release version
+    Crates(String),
 }
 
 #[derive(Clone, Copy, Serialize, Deserialize)]

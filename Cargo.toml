@@ -1,15 +1,17 @@
 [package]
 name = "memflowup"
-version = "0.1.0"
-authors = ["patrick"]
+version = "0.1.0-beta0"
+authors = ["Aurimas Blažulionis <0x60@pm.me>", "ko1N <ko1N1337@gmail.com>"]
 edition = "2018"
 
 
 [dependencies]
 log = { version = "0.4", default-features = false }
-simple_logger = "1.9"
+simple_logger = "1.16"
 rhai = "0.19"
 clap = "2"
+serde = "1.0"
+serde_json = "1.0"
 
 # scripts
 which = "4.0.2"
@@ -20,6 +22,3 @@ dirs = "3.0"
 zip = "0.5"
 crc = "2"
 
-# github api
-serde = "1.0"
-serde_json = "1.0"

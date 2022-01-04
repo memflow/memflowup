@@ -1,12 +1,9 @@
 use crate::database::{load_database, DatabaseEntry, EntryType};
-use crate::github_api;
-use crate::scripting;
 use crate::util;
 
 use std::env;
 use std::ffi::OsStr;
 use std::fs;
-use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
 use log::{info, warn};
@@ -14,27 +11,6 @@ use log::{info, warn};
 use crate::package::*;
 
 use crate::Result;
-
-#[cfg(not(any(target_os = "windows", target_os = "macos")))]
-fn install_paths() -> Vec<PathBuf> {
-    vec![
-        dirs::home_dir().unwrap().join(".local/lib/memflow"),
-        "/usr/lib/memflow".into(),
-    ]
-}
-
-#[cfg(target_os = "windows")]
-fn install_paths() -> Vec<PathBuf> {
-    vec![dirs::document_dir().unwrap().join("memflow")]
-}
-
-#[cfg(target_os = "macos")]
-fn install_paths() -> Vec<PathBuf> {
-    vec![
-        dirs::home_dir().unwrap().join(".local/lib/memflow"),
-        "/usr/lib/memflow".into(),
-    ]
-}
 
 pub fn setup_mode() -> Result<()> {
     // 1. ensure rustup / cargo is installed in PATH
@@ -54,7 +30,11 @@ fn ensure_rust() -> Result<()> {
         }
         Err(_) => {
             warn!("cargo not found");
-            if util::user_input_boolean("do you want memflowup to install rust via rustup?", true)?
+            if !cfg!(windows)
+                && util::user_input_boolean(
+                    "do you want memflowup to install rust via rustup?",
+                    true,
+                )?
             {
                 info!("cargo not found, installing via rustup");
                 install_rust()
@@ -73,9 +53,17 @@ fn install_rust() -> Result<()> {
             info!("rustup found at {:?}", rustup_path);
             install_rust_toolchain(rustup_path)
         }
-        Err(_) => {
+        Err(_) if !cfg!(unix) => {
             warn!("rustup is not installed, trying to download");
-            install_rustup()
+            install_rustup().and_then(|_| {
+                install_rust_toolchain(
+                    which::which("rustup").expect("No rustup found after installing rustup!"),
+                )
+            })
+        }
+        _ => {
+            warn!("rustup is not installed, setup manually!");
+            Err("Please install rustup".into())
         }
     }
 }
@@ -123,7 +111,7 @@ fn install_rustup() -> Result<()> {
 }
 
 fn install_modules() -> Result<()> {
-    println!("Installing initial packages. You can always re-run memflowup to install additional packages, or to different paths.");
+    println!("Running in interactive mode. You can always re-run memflowup to install additional packages, or to different paths.");
 
     let system_wide = util::user_input_boolean(
         "do you want to install the initial packages system-wide?",
@@ -174,6 +162,10 @@ fn install_modules() -> Result<()> {
                 ty: EntryType::LocalPath(tag),
                 ..
             }) => print!(" [installed: path {}]", tag),
+            Some(DatabaseEntry {
+                ty: EntryType::Crates(version),
+                ..
+            }) => print!(" [installed: crates.io {}]", version),
             None => {}
         }
 
