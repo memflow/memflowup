@@ -155,16 +155,21 @@ pub fn update_index(system_wide: bool) -> Result<()> {
 
     info!("Updating index:");
 
-    // TODO: switch this to main branch when publishing
-    let bytes = util::http_download_file(
-        "https://raw.githubusercontent.com/memflow/memflowup/main/index.json",
-    )?;
+    match util::http_download_file(
+        "https://raw.githubusercontent.com/memflow/memflowup/master/index.json",
+    ) {
+        Ok(bytes) => {
+            util::create_dir_with_elevation(path.as_path().parent().unwrap(), system_wide)?;
 
-    util::create_dir_with_elevation(path.as_path().parent().unwrap(), system_wide)?;
-
-    util::write_with_elevation(path, system_wide, |mut file| {
-        file.write_all(&bytes).map_err(Into::into)
-    })
+            util::write_with_elevation(path, system_wide, |mut file| {
+                file.write_all(&bytes).map_err(Into::into)
+            })
+        }
+        Err(e) => {
+            error!("Failed to download index: {}", e);
+            Ok(())
+        }
+    }
 }
 
 pub fn load_packages(system_wide: bool) -> Result<Vec<Package>> {

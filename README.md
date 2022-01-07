@@ -5,7 +5,7 @@ This tool is meant to provide a really quick way to setup various memflow connec
 Install through cargo:
 
 ```
-cargo install memflowup
+cargo install memflowup --version ^0.1.0-beta
 ```
 
 ## Usage
@@ -25,7 +25,7 @@ memflowup interactive
 Install a set of connectors non-interactively:
 
 ```
-memflowup install memflow-qemu-procfs memflow-coredump
+memflowup install memflow-qemu memflow-coredump
 ```
 
 Update all connectors:
