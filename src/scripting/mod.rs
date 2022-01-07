@@ -316,7 +316,7 @@ pub fn execute_installer(
 
     // if local, do not download the script
     let download_script = if let Some(path) = &package.install_script_path {
-        if opts.is_local {
+        if !opts.is_local {
             Some(
                 github_api::download_raw(&package.repo_root_url, &sha, &path)
                     .map(|b| String::from_utf8_lossy(&b).to_string())?,
