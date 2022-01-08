@@ -111,9 +111,9 @@ pub struct ScriptCtx<'a> {
 impl<'a> ScriptCtx<'a> {
     fn download_repository(&mut self) -> Result<Vec<u8>, Box<EvalAltResult>> {
         // TODO: support non-github repos
-        let url = format!("{}/archive/{}.zip", self.package.repo_root_url, self.sha,);
+        let url = format!("{}/archive/{}.zip", self.package.repo_root_url, self.sha);
 
-        info!("download zip file from '{}'", &url,);
+        info!("download zip file from '{}'", &url);
 
         util::http_download_file(&url).map_err(Into::into)
     }
@@ -245,8 +245,9 @@ impl<'a> ScriptCtx<'a> {
             util::create_dir_with_elevation(&out_dir.as_path(), self.opts.system_wide)
                 .map_err(|_| format!("unable to create plugin target directory: {:?}", out_dir))?;
 
-            util::copy_file(&in_path, &out_path, self.opts.system_wide)
-                .map_err(|_| format!("unable to copy plugin to directory: {:?}", out_path))?;
+            util::copy_file(&in_path, &out_path, self.opts.system_wide).map_err(|_| {
+                format!("unable to copy plugin from {:?} to {:?}", in_path, out_path)
+            })?;
 
             info!("successfully copied {:?} to {:?}", in_path, out_path);
 

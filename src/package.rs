@@ -273,3 +273,40 @@ pub fn list(system_wide: bool, branch: Branch) -> Result<()> {
 
     Ok(())
 }
+
+pub fn update(system_wide: bool, dev: bool) -> Result<()> {
+    update_index(system_wide)?;
+
+    let packages = load_packages(system_wide)?;
+
+    let branch = dev.into();
+
+    let db = load_database(branch, system_wide)?;
+
+    println!("Upgrading packages in {} channel:", branch.filename());
+
+    for (i, package) in packages
+        .iter()
+        .filter(|p| p.is_in_channel(branch))
+        .filter(|p| p.supported_by_platform())
+        .filter(|p| db.get(&p.name).is_some())
+        .enumerate()
+    {
+        println!("{}. {} - {:?}", i, package.name, package.ty);
+    }
+    println!();
+
+    for (i, package) in packages
+        .iter()
+        .filter(|p| p.is_in_channel(branch))
+        .filter(|p| p.supported_by_platform())
+        .filter(|p| db.get(&p.name).is_some())
+        .enumerate()
+    {
+        println!("Upgrading {}. {}:", i, package.name);
+        package.install_source(branch, &PackageOpts::system_wide(system_wide))?;
+        println!();
+    }
+
+    Ok(())
+}

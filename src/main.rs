@@ -51,6 +51,10 @@ fn main() -> Result<()> {
             matches.occurrences_of("system") > 0,
             (matches.occurrences_of("dev") > 0).into(),
         ),
+        ("update", Some(matches)) => package::update(
+            matches.occurrences_of("system") > 0,
+            (matches.occurrences_of("dev") > 0).into(),
+        ),
         _ => setup_mode::setup_mode(),
     }
 }
@@ -72,6 +76,13 @@ fn parse_args() -> ArgMatches<'static> {
             SubCommand::with_name("list")
                 .about("Lists all installed packages")
                 .visible_aliases(&["list", "l"])
+                .arg(Arg::with_name("system").long("system").short("s"))
+                .arg(Arg::with_name("dev").long("dev").short("d")),
+        )
+        .subcommand(
+            SubCommand::with_name("update")
+                .about("Updates all installed packages")
+                .visible_aliases(&["update", "u"])
                 .arg(Arg::with_name("system").long("system").short("s"))
                 .arg(Arg::with_name("dev").long("dev").short("d")),
         )

@@ -87,7 +87,6 @@ pub fn download_repository_release_latest(group: &str, repository: &str) -> Resu
             match find_platform_asset(release) {
                 Some(asset) => {
                     info!("valid binary found for current platform: {}", asset.name);
-                    println!("yolo: {:?}", asset);
                     let out_file = util::tmp_file(&asset.name);
                     download_file(&asset.browser_download_url, &out_file)?;
                     Ok(out_file)
