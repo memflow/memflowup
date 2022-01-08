@@ -14,7 +14,7 @@ pub struct DatabaseEntry {
     pub artifacts: Vec<String>,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
 pub enum EntryType {
     /// Git commit hash
     GitSource(String),

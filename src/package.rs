@@ -296,14 +296,14 @@ pub fn update(system_wide: bool, dev: bool) -> Result<()> {
     }
     println!();
 
-    for (i, package) in packages
+    for package in packages
         .iter()
         .filter(|p| p.is_in_channel(branch))
         .filter(|p| p.supported_by_platform())
         .filter(|p| db.get(&p.name).is_some())
         .enumerate()
     {
-        println!("Upgrading {}. {}:", i, package.name);
+        println!("Upgrading {}:", package.name);
         package.install_source(branch, &PackageOpts::system_wide(system_wide))?;
         println!();
     }

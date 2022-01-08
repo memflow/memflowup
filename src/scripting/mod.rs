@@ -1,5 +1,5 @@
 use crate::{
-    database::{Branch, EntryType},
+    database::{load_database, Branch, EntryType},
     github_api,
     package::{Package, PackageOpts},
     util,
@@ -202,17 +202,21 @@ impl<'a> ScriptCtx<'a> {
         self.tmp_dir.to_str().unwrap().to_string()
     }
 
+    fn entry_type(&self) -> EntryType {
+        if self.opts.is_local {
+            EntryType::LocalPath(self.package.repo_root_url.clone())
+        } else {
+            EntryType::GitSource(self.sha.into())
+        }
+    }
+
     fn copy_cargo_plugin_artifact(
         &mut self,
         path: &str,
         artifact: &str,
     ) -> Result<(), Box<EvalAltResult>> {
         // Mark that we did source installation:
-        *self.installed_release.try_borrow_mut().unwrap() = Some(if self.opts.is_local {
-            EntryType::LocalPath(self.package.repo_root_url.clone())
-        } else {
-            EntryType::GitSource(self.sha.into())
-        });
+        *self.installed_release.try_borrow_mut().unwrap() = Some(self.entry_type());
 
         let mut in_path = PathBuf::from(path);
         in_path.push("target");
@@ -318,6 +322,18 @@ pub fn execute_installer(
         installed_release: &installed_release,
         sha: &sha,
     };
+
+    // TODO: check if sha matches current installation path
+    let db = load_database(branch, opts.system_wide)?;
+    if let Some(p) = db.get(&package.name) {
+        if p.ty == ctx.entry_type() {
+            println!(
+                "The installed version of {} is already the latest version, skipping installation...",
+                &package.name
+            );
+            return Ok((p.ty.clone(), p.artifacts.clone()));
+        }
+    }
 
     // if local, do not download the script
     let download_script = if let Some(path) = &package.install_script_path {
