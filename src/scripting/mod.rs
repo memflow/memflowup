@@ -235,16 +235,18 @@ impl<'a> ScriptCtx<'a> {
         if self.opts.nocopy {
             info!("{}", out_filename);
         } else {
-            let out_path = self
-                .package
-                .ty
-                .install_path(self.opts.system_wide)
-                .join(out_filename);
+            let out_dir = self.package.ty.install_path(self.opts.system_wide);
+            let out_path = out_dir.join(out_filename);
 
             out_path.to_str().ok_or("invalid output path")?;
 
+            util::create_dir_with_elevation(&out_dir.as_path(), self.opts.system_wide)
+                .map_err(|_| format!("unable to create plugin target directory: {:?}", out_dir))?;
+
             util::copy_file(&in_path, &out_path, self.opts.system_wide)
-                .map_err(|_| "failed to copy to user path")?;
+                .map_err(|_| format!("unable to copy plugin to directory: {:?}", out_path))?;
+
+            info!("successfully copied {:?} to {:?}", in_path, out_path);
 
             self.installed
                 .try_borrow_mut()
