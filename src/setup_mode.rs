@@ -5,6 +5,7 @@ use crate::util;
 use std::env;
 use std::ffi::OsStr;
 use std::fs;
+use std::path::Path;
 use std::process::{Command, Stdio};
 
 use log::{info, warn};
@@ -165,6 +166,23 @@ fn install_modules() -> Result<()> {
     {
         println!("Installing {}", p.name);
         p.install_source(branch, &PackageOpts::system_wide(system_wide))?;
+    }
+
+    let memflowup_path = env::args()
+        .next()
+        .as_ref()
+        .map(Path::new)
+        .and_then(Path::file_name)
+        .and_then(OsStr::to_str)
+        .map(String::from)
+        .expect("Unable to get the path of the memflowup application");
+
+    if util::user_input_boolean("Do you want to install memflowup in your system?", true)? {
+        util::copy_file(
+            &memflowup_path,
+            &util::executable_dir(true).join("memflowup"),
+            true,
+        )?;
     }
 
     println!("Initial setup done!");

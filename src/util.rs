@@ -318,6 +318,31 @@ pub fn config_dir(system_wide: bool) -> PathBuf {
     }
 }
 
+pub fn executable_dir(system_wide: bool) -> PathBuf {
+    if system_wide {
+        #[cfg(not(windows))]
+        {
+            "/usr/local/bin/".into()
+        }
+        #[cfg(windows)]
+        // TODO: pick a better path
+        {
+            "C:\\memflowup\\{}".into()
+        }
+    } else {
+        #[cfg(not(windows))]
+        {
+            let mut path = dirs::executable_dir().unwrap();
+            path.push("memflowup");
+            path
+        }
+        #[cfg(windows)]
+        {
+            panic!("windows does not have a non system-wide program directory")
+        }
+    }
+}
+
 /// Create a temporary directory, but it can already be an existing one.
 pub fn make_temp_dir(subdir: &str, names: &[&str]) -> Result<TempDir, std::io::Error> {
     let tmp_dir = std::env::temp_dir();

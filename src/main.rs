@@ -55,12 +55,14 @@ fn main() -> Result<()> {
             matches.occurrences_of("system") > 0,
             (matches.occurrences_of("dev") > 0).into(),
         ),
-        _ => setup_mode::setup_mode(),
+        ("interactive", Some(_)) => setup_mode::setup_mode(),
+        _ => Ok(()),
     }
 }
 
 fn parse_args() -> ArgMatches<'static> {
     App::new("memflowup")
+        .setting(AppSettings::ArgRequiredElseHelp)
         .version(crate_version!())
         .author(crate_authors!())
         .arg(Arg::with_name("verbose").short("v").multiple(true))
