@@ -134,6 +134,8 @@ impl<'a> ScriptCtx<'a> {
                 "--recursive",
                 "--depth",
                 "1",
+                "-b",
+                self.package.branch(self.branch).unwrap(),
                 &self.package.repo_root_url,
                 path_str,
             ])
