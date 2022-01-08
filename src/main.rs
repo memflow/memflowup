@@ -15,10 +15,8 @@ pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 fn main() -> Result<()> {
     let matches = parse_args();
 
-    simple_logger::SimpleLogger::new().init().unwrap();
-
     // set log level
-    let level = match matches.occurrences_of("verbose") {
+    let log_level = match matches.occurrences_of("verbose") {
         0 => Level::Error,
         1 => Level::Warn,
         2 => Level::Info,
@@ -26,8 +24,13 @@ fn main() -> Result<()> {
         4 => Level::Trace,
         _ => Level::Trace,
     };
-
-    log::set_max_level(level.to_level_filter());
+    simplelog::TermLogger::init(
+        log_level.to_level_filter(),
+        simplelog::Config::default(),
+        simplelog::TerminalMode::Stdout,
+        simplelog::ColorChoice::Auto,
+    )
+    .unwrap();
 
     match matches.subcommand() {
         ("build", Some(matches)) => build_mode::build(
@@ -43,6 +46,10 @@ fn main() -> Result<()> {
             &matches.values_of_lossy("packages").unwrap(),
             matches.occurrences_of("system") > 0,
             matches.occurrences_of("dev") > 0,
+        ),
+        ("list", Some(matches)) => package::list(
+            matches.occurrences_of("system") > 0,
+            (matches.occurrences_of("dev") > 0).into(),
         ),
         _ => setup_mode::setup_mode(),
     }
@@ -60,6 +67,13 @@ fn parse_args() -> ArgMatches<'static> {
                 .arg(Arg::with_name("system").long("system").short("s"))
                 .arg(Arg::with_name("dev").long("dev").short("d"))
                 .arg(Arg::with_name("packages").required(true).multiple(true)),
+        )
+        .subcommand(
+            SubCommand::with_name("list")
+                .about("Lists all installed packages")
+                .visible_aliases(&["list", "l"])
+                .arg(Arg::with_name("system").long("system").short("s"))
+                .arg(Arg::with_name("dev").long("dev").short("d")),
         )
         .subcommand(
             SubCommand::with_name("interactive")

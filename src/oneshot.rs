@@ -1,4 +1,5 @@
 use crate::database::Branch;
+use crate::database::{load_database, DatabaseEntry, EntryType};
 use crate::package::*;
 use crate::Result;
 

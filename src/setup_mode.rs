@@ -1,4 +1,5 @@
-use crate::database::{load_database, DatabaseEntry, EntryType};
+use crate::database::load_database;
+use crate::package;
 use crate::util;
 
 use std::env;
@@ -130,47 +131,7 @@ fn install_modules() -> Result<()> {
     .map(|r| r != 0)
     .map(<_>::into)?;
 
-    let db = load_database(branch, system_wide)?;
-
-    println!("using {} channel", branch.filename());
-
-    println!();
-
-    println!("Available packages:");
-
-    for (i, package) in packages
-        .iter()
-        .filter(|p| p.is_in_channel(branch))
-        .filter(|p| p.supported_by_platform())
-        .enumerate()
-    {
-        print!("{}. {} - {:?}", i, package.name, package.ty);
-
-        match db.get(&package.name) {
-            Some(DatabaseEntry {
-                ty: EntryType::GitSource(hash),
-                ..
-            }) => print!(
-                " [installed: git {}]",
-                hash.chars().take(6).collect::<String>()
-            ),
-            Some(DatabaseEntry {
-                ty: EntryType::Binary(tag),
-                ..
-            }) => print!(" [installed: binary {}]", tag),
-            Some(DatabaseEntry {
-                ty: EntryType::LocalPath(tag),
-                ..
-            }) => print!(" [installed: path {}]", tag),
-            Some(DatabaseEntry {
-                ty: EntryType::Crates(version),
-                ..
-            }) => print!(" [installed: crates.io {}]", version),
-            None => {}
-        }
-
-        println!();
-    }
+    package::list(system_wide, branch)?;
 
     println!();
 

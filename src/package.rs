@@ -1,6 +1,9 @@
 use serde::*;
 
-use crate::{database, scripting, util, Result};
+use crate::{
+    database::{self, load_database, DatabaseEntry, EntryType},
+    scripting, util, Result,
+};
 use database::Branch;
 
 use std::fs;
@@ -223,4 +226,50 @@ pub fn load_packages(system_wide: bool) -> Result<Vec<Package>> {
     });
 
     Ok(ret)
+}
+
+pub fn list(system_wide: bool, branch: Branch) -> Result<()> {
+    update_index(system_wide)?;
+
+    let packages = load_packages(system_wide)?;
+
+    let db = load_database(branch, system_wide)?;
+
+    println!("Available packages in {} channel:", branch.filename());
+
+    for (i, package) in packages
+        .iter()
+        .filter(|p| p.is_in_channel(branch))
+        .filter(|p| p.supported_by_platform())
+        .enumerate()
+    {
+        print!("{}. {} - {:?}", i, package.name, package.ty);
+
+        match db.get(&package.name) {
+            Some(DatabaseEntry {
+                ty: EntryType::GitSource(hash),
+                ..
+            }) => print!(
+                " [installed: git {}]",
+                hash.chars().take(6).collect::<String>()
+            ),
+            Some(DatabaseEntry {
+                ty: EntryType::Binary(tag),
+                ..
+            }) => print!(" [installed: binary {}]", tag),
+            Some(DatabaseEntry {
+                ty: EntryType::LocalPath(tag),
+                ..
+            }) => print!(" [installed: path {}]", tag),
+            Some(DatabaseEntry {
+                ty: EntryType::Crates(version),
+                ..
+            }) => print!(" [installed: crates.io {}]", version),
+            None => {}
+        }
+
+        println!();
+    }
+
+    Ok(())
 }
