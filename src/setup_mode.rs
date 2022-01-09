@@ -168,6 +168,8 @@ fn install_modules() -> Result<()> {
         p.install_source(branch, &PackageOpts::system_wide(system_wide))?;
     }
 
+    // since we install over cargo we skip adding memflowup into path for now.
+    /*
     let memflowup_path = env::args()
         .next()
         .as_ref()
@@ -184,6 +186,7 @@ fn install_modules() -> Result<()> {
             true,
         )?;
     }
+    */
 
     println!("Initial setup done!");
 
