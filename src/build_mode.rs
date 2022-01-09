@@ -1,16 +1,3 @@
-use crate::database::{load_database, DatabaseEntry, EntryType};
-use crate::github_api;
-use crate::scripting;
-use crate::util;
-
-use std::env;
-use std::ffi::OsStr;
-use std::fs;
-use std::path::PathBuf;
-use std::process::{Command, Stdio};
-
-use log::{info, warn};
-
 use crate::package::*;
 
 use crate::Result;
@@ -47,6 +34,7 @@ pub fn build(
         is_local: true,
         nocopy,
         system_wide,
+        reinstall: true,
     };
 
     package.install_local(&opts)?;

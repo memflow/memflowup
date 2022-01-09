@@ -32,6 +32,7 @@ pub struct PackageOpts {
     pub is_local: bool,
     pub nocopy: bool,
     pub system_wide: bool,
+    pub reinstall: bool,
 }
 
 impl PackageOpts {

@@ -323,15 +323,17 @@ pub fn execute_installer(
         sha: &sha,
     };
 
-    // TODO: check if sha matches current installation path
-    let db = load_database(branch, opts.system_wide)?;
-    if let Some(p) = db.get(&package.name) {
-        if p.ty == ctx.entry_type() {
-            println!(
-                "The installed version of {} is already the latest version, skipping installation...",
-                &package.name
-            );
-            return Ok((p.ty.clone(), p.artifacts.clone()));
+    // check if we have the latest version installed
+    if !opts.reinstall {
+        let db = load_database(branch, opts.system_wide)?;
+        if let Some(p) = db.get(&package.name) {
+            if p.ty == ctx.entry_type() {
+                println!(
+                    "The installed version of {} is already the latest version.",
+                    &package.name
+                );
+                return Ok((p.ty.clone(), p.artifacts.clone()));
+            }
         }
     }
 

@@ -56,6 +56,7 @@ pub struct Commit {
 }
 
 // TODO: filter for archicture
+#[allow(unused)]
 #[cfg(not(any(target_os = "windows", target_os = "macos")))]
 fn find_platform_asset<'a>(release: &'a Release) -> Option<&'a Asset> {
     release.assets.iter().find(|a| a.name.contains("linux"))
@@ -72,6 +73,7 @@ fn find_platform_asset<'a>(release: &'a Release) -> Option<&'a Asset> {
 }
 
 /// Downloads a release from the specified repository.
+#[allow(unused)]
 pub fn download_repository_release_latest(group: &str, repository: &str) -> Result<String, String> {
     let releases: Vec<Release> = util::http_get_json(&format!(
         "https://api.github.com/repos/{}/{}/releases",
@@ -113,6 +115,7 @@ pub fn get_branch(url: &str, branch: &str) -> Result<Branch, &'static str> {
 }
 
 /// Downloads the given url to the destination file
+#[allow(unused)]
 fn download_file(url: &str, file: &str) -> Result<(), String> {
     info!("download file from '{}' to '{}'", url.clone(), file.clone());
     let bytes = match util::http_download_file(url) {

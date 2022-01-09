@@ -67,6 +67,7 @@ pub fn user_input(question: &str, options: &[&str], default: usize) -> crate::Re
 }
 
 /// Returns the path to a temporary file with the given name
+#[allow(unused)]
 pub fn tmp_file(name: &str) -> String {
     env::temp_dir().join(name).to_string_lossy().to_string()
 }
@@ -266,7 +267,6 @@ pub fn copy_file(
         to.as_ref().to_string_lossy(),
     );
 
-    // std::fs::create_dir_all(memflow_user_path.clone()).ok(); // TODO: handle file exists error and clean folder
     match std::fs::copy(from, to) {
         Ok(_) => Ok(()),
         Err(err) => {
@@ -318,6 +318,7 @@ pub fn config_dir(system_wide: bool) -> PathBuf {
     }
 }
 
+#[allow(unused)]
 pub fn executable_dir(system_wide: bool) -> PathBuf {
     if system_wide {
         #[cfg(not(windows))]

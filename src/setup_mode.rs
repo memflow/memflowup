@@ -1,11 +1,9 @@
-use crate::database::load_database;
 use crate::package;
 use crate::util;
 
 use std::env;
 use std::ffi::OsStr;
 use std::fs;
-use std::path::Path;
 use std::process::{Command, Stdio};
 
 use log::{info, warn};
