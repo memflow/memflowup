@@ -25,7 +25,13 @@ memflowup interactive
 Install a set of connectors non-interactively:
 
 ```sh
-memflowup install memflow-qemu memflow-coredump
+memflowup install memflow-qemu-procfs memflow-coredump
+```
+
+Same with development (0.2) channel:
+
+```sh
+memflowup install -d memflow-qemu memflow-coredump
 ```
 
 Update all connectors that are installed system-wide (`-s`) from development channel (`-d`):

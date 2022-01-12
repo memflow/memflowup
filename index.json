@@ -25,8 +25,15 @@
 		"ty": "CorePlugin",
 		"platforms": ["linux", "windows"],
 		"repo_root_url": "https://github.com/memflow/memflow-qemu",
-		"stable_branch": "master",
+		"_stable_branch": "master",
 		"dev_branch": "next"
+	},
+	{
+		"name": "memflow-qemu-procfs",
+		"ty": "CorePlugin",
+		"platforms": ["linux"],
+		"repo_root_url": "https://github.com/memflow/memflow-qemu",
+		"stable_branch": "master"
 	},
 	{
 		"name": "memflow-coredump",
