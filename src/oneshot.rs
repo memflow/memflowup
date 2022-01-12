@@ -2,8 +2,14 @@ use crate::database::Branch;
 use crate::package::*;
 use crate::Result;
 
-pub fn install(to_install: &[String], system_wide: bool, dev: bool, reinstall: bool) -> Result<()> {
-    let packages = load_packages(system_wide)?;
+pub fn install(
+    to_install: &[String],
+    system_wide: bool,
+    dev: bool,
+    reinstall: bool,
+    load_opts: PackageLoadOpts,
+) -> Result<()> {
+    let packages = load_packages(system_wide, load_opts)?;
 
     let branch: Branch = dev.into();
 

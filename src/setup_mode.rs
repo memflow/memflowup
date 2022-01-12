@@ -12,14 +12,14 @@ use crate::package::*;
 
 use crate::Result;
 
-pub fn setup_mode() -> Result<()> {
+pub fn setup_mode(load_opts: PackageLoadOpts) -> Result<()> {
     // 1. ensure rustup / cargo is installed in PATH
     ensure_rust()?;
 
     // 2. install memflowup in PATH
 
     // 3. install default set of connectors for the current platform
-    install_modules()
+    install_modules(load_opts)
 }
 
 fn ensure_rust() -> Result<()> {
@@ -110,7 +110,7 @@ fn install_rustup() -> Result<()> {
     Ok(())
 }
 
-fn install_modules() -> Result<()> {
+fn install_modules(load_opts: PackageLoadOpts) -> Result<()> {
     println!("Running in interactive mode. You can always re-run memflowup to install additional packages, or to different paths.");
 
     let system_wide = util::user_input_boolean(
@@ -120,7 +120,7 @@ fn install_modules() -> Result<()> {
 
     update_index(system_wide)?;
 
-    let packages = load_packages(system_wide)?;
+    let packages = load_packages(system_wide, load_opts)?;
 
     let branch = util::user_input(
         "which channel do you want to use?",
@@ -130,7 +130,7 @@ fn install_modules() -> Result<()> {
     .map(|r| r != 0)
     .map(<_>::into)?;
 
-    package::list(system_wide, branch)?;
+    package::list(system_wide, branch, load_opts)?;
 
     println!();
 

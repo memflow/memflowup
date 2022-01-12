@@ -14,6 +14,23 @@ use log::*;
 
 const BUILTIN_INDEX: &str = include_str!("../index.json");
 
+#[derive(Default, Copy, Clone, Debug)]
+pub struct PackageLoadOpts {
+    pub ignore_user: bool,
+    pub ignore_upstream: bool,
+    pub ignore_builtin: bool,
+}
+
+impl PackageLoadOpts {
+    pub fn new(ignore_user: bool, ignore_upstream: bool, ignore_builtin: bool) -> Self {
+        Self {
+            ignore_user,
+            ignore_upstream,
+            ignore_builtin,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Package {
     pub name: String,
@@ -176,41 +193,47 @@ pub fn update_index(system_wide: bool) -> Result<()> {
     }
 }
 
-pub fn load_packages(system_wide: bool) -> Result<Vec<Package>> {
+pub fn load_packages(system_wide: bool, load_opts: PackageLoadOpts) -> Result<Vec<Package>> {
     let mut ret = vec![];
 
     let mut path = util::config_dir(system_wide);
 
     path.push("index");
 
-    path.push("custom");
-
     // First load user specified indices
 
-    for p in fs::read_dir(&path).into_iter().flatten() {
-        let p = p?.path();
-        if p.extension().map(|s| s.to_str()).flatten() == Some("json") {
-            let file = fs::File::open(p)?;
+    if !load_opts.ignore_user {
+        path.push("custom");
+
+        for p in fs::read_dir(&path).into_iter().flatten() {
+            let p = p?.path();
+            if p.extension().map(|s| s.to_str()).flatten() == Some("json") {
+                let file = fs::File::open(p)?;
+                let parsed: Vec<Package> = serde_json::from_reader(file)?;
+                ret.extend(parsed);
+            }
+        }
+
+        path.pop();
+    }
+
+    // Then the default index
+
+    if !load_opts.ignore_upstream {
+        path.push("default.json");
+
+        if let Ok(file) = fs::File::open(path) {
             let parsed: Vec<Package> = serde_json::from_reader(file)?;
             ret.extend(parsed);
         }
     }
 
-    path.pop();
-
-    // Then the default index
-
-    path.push("default.json");
-
-    if let Ok(file) = fs::File::open(path) {
-        let parsed: Vec<Package> = serde_json::from_reader(file)?;
-        ret.extend(parsed);
-    }
-
     // Then the builtin index
 
-    let parsed: Vec<Package> = serde_json::from_str(BUILTIN_INDEX)?;
-    ret.extend(parsed);
+    if !load_opts.ignore_builtin {
+        let parsed: Vec<Package> = serde_json::from_str(BUILTIN_INDEX)?;
+        ret.extend(parsed);
+    }
 
     // And finally, dedup everything so user has no duplicate entries, and user's entries are the
     // ones preserved in case of duplicates.
@@ -229,10 +252,10 @@ pub fn load_packages(system_wide: bool) -> Result<Vec<Package>> {
     Ok(ret)
 }
 
-pub fn list(system_wide: bool, branch: Branch) -> Result<()> {
+pub fn list(system_wide: bool, branch: Branch, load_opts: PackageLoadOpts) -> Result<()> {
     update_index(system_wide)?;
 
-    let packages = load_packages(system_wide)?;
+    let packages = load_packages(system_wide, load_opts)?;
 
     let db = load_database(branch, system_wide)?;
 
@@ -275,10 +298,10 @@ pub fn list(system_wide: bool, branch: Branch) -> Result<()> {
     Ok(())
 }
 
-pub fn update(system_wide: bool, dev: bool) -> Result<()> {
+pub fn update(system_wide: bool, dev: bool, load_opts: PackageLoadOpts) -> Result<()> {
     update_index(system_wide)?;
 
-    let packages = load_packages(system_wide)?;
+    let packages = load_packages(system_wide, load_opts)?;
 
     let branch = dev.into();
 

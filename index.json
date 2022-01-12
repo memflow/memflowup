@@ -55,7 +55,7 @@
 		"ty": "CorePlugin",
 		"platforms": ["linux"],
 		"repo_root_url": "https://github.com/memflow/memflow-kvm",
-		"_stable_branch": "master",
+		"stable_branch": "master",
 		"dev_branch": "next",
 		"install_script_path": "install.rhai"
 	}
