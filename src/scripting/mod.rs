@@ -23,18 +23,18 @@ const DEFAULT_SCRIPT: &str = include_str!("../../standard.rhai");
 const CRC: Crc<u64> = Crc::<u64>::new(&CRC_64_GO_ISO);
 
 /// Prints info
-fn info(s: &str) -> () {
+fn info(s: &str) {
     info!("{}", s);
 }
 
 /// Prints an error
-fn error(s: &str) -> () {
+fn error(s: &str) {
     error!("{}", s);
 }
 
 /// Executes cargo with the given flags
 fn cargo(args: &str, pwd: &str) -> Result<Dynamic, Box<EvalAltResult>> {
-    info!("executing 'cargo {}' in '{}'", args.clone(), pwd.clone());
+    info!("executing 'cargo {}' in '{}'", args, pwd);
 
     let mut cmd = Command::new("cargo");
 
@@ -42,7 +42,7 @@ fn cargo(args: &str, pwd: &str) -> Result<Dynamic, Box<EvalAltResult>> {
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit());
 
-    for arg in args.split(" ") {
+    for arg in args.split(' ') {
         cmd.arg(arg);
     }
 
@@ -50,7 +50,7 @@ fn cargo(args: &str, pwd: &str) -> Result<Dynamic, Box<EvalAltResult>> {
         Ok(_) => Ok(().into()),
         Err(err) => {
             error!("{}", err);
-            return Err(err.to_string().into());
+            Err(err.to_string().into())
         }
     }
 }
@@ -261,7 +261,7 @@ impl<'a> ScriptCtx<'a> {
                 .push(out_path.to_str().unwrap().to_string());
         }
 
-        Ok(().into())
+        Ok(())
     }
 }
 
@@ -299,7 +299,7 @@ pub fn execute_installer(
         )
     };
 
-    let tmp_dir = tmp_dir.as_deref().or(local_dir.as_ref()).unwrap();
+    let tmp_dir = tmp_dir.as_deref().or_else(|| local_dir.as_ref()).unwrap();
 
     let installed = RefCell::new(vec![]);
     let installed_release = RefCell::new(None);
@@ -341,7 +341,7 @@ pub fn execute_installer(
     let download_script = if let Some(path) = &package.install_script_path {
         if !opts.is_local {
             Some(
-                github_api::download_raw(&package.repo_root_url, &sha, &path)
+                github_api::download_raw(&package.repo_root_url, &sha, path)
                     .map(|b| String::from_utf8_lossy(&b).to_string())?,
             )
         } else {
@@ -380,7 +380,7 @@ pub fn execute_installer(
         .register_result_fn("cargo", cargo);
 
     let mut scope = Scope::new();
-    let ast = engine.compile_with_scope(&mut scope, script).unwrap();
+    let ast = engine.compile_with_scope(&scope, script).unwrap();
 
     // SAFETY: engine does not outlive the ctx/package.
     let ctx = unsafe { std::mem::transmute::<_, ScriptCtx<'static>>(ctx) };
@@ -392,7 +392,7 @@ pub fn execute_installer(
     std::mem::drop(engine);
 
     Ok((
-        installed_release.into_inner().ok_or_else(|| {
+        installed_release.into_inner().ok_or({
             // TODO: cleanup artifacts
             "Script failed to mark installed release!"
         })?,

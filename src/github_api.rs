@@ -58,7 +58,7 @@ pub struct Commit {
 // TODO: filter for archicture
 #[allow(unused)]
 #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-fn find_platform_asset<'a>(release: &'a Release) -> Option<&'a Asset> {
+fn find_platform_asset(release: &Release) -> Option<&Asset> {
     release.assets.iter().find(|a| a.name.contains("linux"))
 }
 
@@ -94,11 +94,14 @@ pub fn download_repository_release_latest(group: &str, repository: &str) -> Resu
                     Ok(out_file)
                 },
                 None => {
-                    Err(format!("unable to find appropiate binary for the current platform for release {}/{}/{}", group, repository, release.tag_name).into())
+                    Err(format!("unable to find appropiate binary for the current platform for release {}/{}/{}", group, repository, release.tag_name))
                 }
             }
         }
-        None => Err(format!("unable to find a release for {}/{}", group, repository).into()),
+        None => Err(format!(
+            "unable to find a release for {}/{}",
+            group, repository
+        )),
     }
 }
 
@@ -117,7 +120,7 @@ pub fn get_branch(url: &str, branch: &str) -> Result<Branch, &'static str> {
 /// Downloads the given url to the destination file
 #[allow(unused)]
 fn download_file(url: &str, file: &str) -> Result<(), String> {
-    info!("download file from '{}' to '{}'", url.clone(), file.clone());
+    info!("download file from '{}' to '{}'", url, file);
     let bytes = match util::http_download_file(url) {
         Ok(b) => b,
         Err(err) => {
@@ -127,10 +130,10 @@ fn download_file(url: &str, file: &str) -> Result<(), String> {
     };
 
     match fs::write(file, bytes) {
-        Ok(()) => Ok(().into()),
+        Ok(()) => Ok(()),
         Err(err) => {
             error!("{}", err);
-            Err(err.to_string().into())
+            Err(err.to_string())
         }
     }
 }

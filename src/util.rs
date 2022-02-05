@@ -58,9 +58,8 @@ pub fn user_input(question: &str, options: &[&str], default: usize) -> crate::Re
                 .filter(|(_, o)| o.to_lowercase().starts_with(&input_stripped));
 
             // Return only if there's just a single starts_with match
-            match (iter.next(), iter.next()) {
-                (Some((i, _)), None) => return Ok(i),
-                _ => {}
+            if let (Some((i, _)), None) = (iter.next(), iter.next()) {
+                return Ok(i);
             }
         }
     }
@@ -167,7 +166,7 @@ pub fn create_dir_with_elevation(path: impl AsRef<Path>, elevate: bool) -> crate
                     .stderr(Stdio::inherit())
                     .output()
                 {
-                    Ok(_) => return Ok(()),
+                    Ok(_) => Ok(()),
                     Err(err) => {
                         error!("{}", err);
                         Err(err.into())
@@ -201,13 +200,13 @@ pub fn write_with_elevation(
     }
 }
 
-pub fn zip_unpack(in_buf: &[u8], out_dir: &PathBuf, strip_path: i64) -> Result<(), String> {
-    let zip_cursor = std::io::Cursor::new(&in_buf[..]);
+pub fn zip_unpack(in_buf: &[u8], out_dir: &Path, strip_path: i64) -> Result<(), String> {
+    let zip_cursor = std::io::Cursor::new(in_buf);
     let mut zip_archive = match ZipArchive::new(zip_cursor) {
         Ok(archive) => archive,
         Err(err) => {
             error!("{:?}", err);
-            return Err(format!("{:?}", err).into());
+            return Err(format!("{:?}", err));
         }
     };
 
@@ -295,7 +294,7 @@ pub fn copy_file(
                 };
             }
             error!("{}", &err);
-            return Err(err);
+            Err(err)
         }
     }
 }

@@ -21,14 +21,15 @@ pub fn install(
         ..Default::default()
     };
 
-    for p in packages
+    for package in packages
         .into_iter()
         .filter(|p| p.is_in_channel(branch))
         .filter(Package::supported_by_platform)
         .filter(|p| to_install.contains(&p.name))
     {
-        println!("Installing {}", p.name);
-        p.install_source(branch, &opts)?;
+        println!("Installing {}:", package.name);
+        package.install_source(branch, &opts)?;
+        println!();
     }
 
     Ok(())
