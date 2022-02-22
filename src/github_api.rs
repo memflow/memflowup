@@ -149,3 +149,14 @@ pub fn download_raw(repo: &str, branch: &str, path: &str) -> Result<Vec<u8>, &'s
 
     util::http_download_file(&url)
 }
+
+pub fn download_release_artifact(
+    repo: &str,
+    release_tag: &str,
+    artifact: &str,
+) -> Result<Vec<u8>, &'static str> {
+    let url = format!("{}/releases/download/{}/{}", repo, release_tag, artifact);
+    info!("download artifact from '{}'", url);
+
+    util::http_download_file(&url)
+}

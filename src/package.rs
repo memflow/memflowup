@@ -38,7 +38,9 @@ pub struct Package {
     pub platforms: Option<Vec<String>>,
     pub repo_root_url: String,
     pub stable_branch: Option<String>,
+    pub stable_binary_tag: Option<String>,
     pub dev_branch: Option<String>,
+    pub dev_binary_tag: Option<String>,
     #[serde(default)]
     pub unsafe_commands: bool,
     pub install_script_path: Option<String>,
@@ -50,21 +52,30 @@ pub struct PackageOpts {
     pub nocopy: bool,
     pub system_wide: bool,
     pub reinstall: bool,
+    pub from_source: bool,
 }
 
 impl PackageOpts {
-    pub fn system_wide(system_wide: bool) -> Self {
+    pub fn base_opts(system_wide: bool, from_source: bool) -> Self {
         Self {
             system_wide,
+            from_source,
             ..Default::default()
         }
     }
 }
 
 impl Package {
-    pub fn install_source(&self, branch: Branch, opts: &PackageOpts) -> Result<()> {
-        let (ty, artifacts) =
-            scripting::execute_installer(self, opts, branch, "build_from_source")?;
+    pub fn install(&self, branch: Branch, opts: &PackageOpts) -> Result<()> {
+        if opts.from_source {
+            self.install_inner(branch, "build_from_source", opts)
+        } else {
+            self.install_inner(branch, "install", opts)
+        }
+    }
+
+    fn install_inner(&self, branch: Branch, entrypoint: &str, opts: &PackageOpts) -> Result<()> {
+        let (ty, artifacts) = scripting::execute_installer(self, opts, branch, entrypoint)?;
 
         database::commit_entry(
             &self.name,
@@ -75,15 +86,7 @@ impl Package {
     }
 
     pub fn install_local(&self, opts: &PackageOpts) -> Result<()> {
-        let (ty, artifacts) =
-            scripting::execute_installer(self, opts, Branch::Local, "build_local")?;
-
-        database::commit_entry(
-            &self.name,
-            database::DatabaseEntry { ty, artifacts },
-            Branch::Local,
-            opts.system_wide,
-        )
+        self.install_inner(Branch::Local, "build_local", opts)
     }
 
     pub fn supported_by_platform(&self) -> bool {
@@ -109,6 +112,10 @@ impl Package {
         }
     }
 
+    pub fn supports_install_mode(&self, branch: Branch, from_source: bool) -> bool {
+        self.is_in_channel(branch) && (from_source || self.binary_release_tag(branch).is_some())
+    }
+
     pub fn is_in_channel(&self, branch: Branch) -> bool {
         self.branch(branch).is_some()
     }
@@ -117,6 +124,14 @@ impl Package {
         match branch {
             Branch::Dev => self.dev_branch.as_deref(),
             Branch::Stable => self.stable_branch.as_deref(),
+            _ => None,
+        }
+    }
+
+    pub fn binary_release_tag(&self, branch: Branch) -> Option<&str> {
+        match branch {
+            Branch::Dev => self.dev_binary_tag.as_deref(),
+            Branch::Stable => self.stable_binary_tag.as_deref(),
             _ => None,
         }
     }
@@ -252,8 +267,15 @@ pub fn load_packages(system_wide: bool, load_opts: PackageLoadOpts) -> Result<Ve
     Ok(ret)
 }
 
-pub fn list(system_wide: bool, branch: Branch, load_opts: PackageLoadOpts) -> Result<()> {
-    update_index(system_wide)?;
+pub fn list(
+    system_wide: bool,
+    branch: Branch,
+    from_source: bool,
+    load_opts: PackageLoadOpts,
+) -> Result<()> {
+    if !load_opts.ignore_upstream {
+        update_index(system_wide)?;
+    }
 
     let packages = load_packages(system_wide, load_opts)?;
 
@@ -263,7 +285,7 @@ pub fn list(system_wide: bool, branch: Branch, load_opts: PackageLoadOpts) -> Re
 
     for (i, package) in packages
         .iter()
-        .filter(|p| p.is_in_channel(branch))
+        .filter(|p| p.supports_install_mode(branch, from_source))
         .filter(|p| p.supported_by_platform())
         .enumerate()
     {
@@ -320,14 +342,21 @@ pub fn update(system_wide: bool, dev: bool, load_opts: PackageLoadOpts) -> Resul
     }
     println!();
 
-    for package in packages
+    for (package, from_source) in packages
         .iter()
         .filter(|p| p.is_in_channel(branch))
         .filter(|p| p.supported_by_platform())
-        .filter(|p| db.get(&p.name).is_some())
+        .filter_map(|p| match db.get(&p.name) {
+            Some(DatabaseEntry {
+                ty: EntryType::Binary(_),
+                ..
+            }) => Some((p, false)),
+            Some(_) => Some((p, true)),
+            _ => None,
+        })
     {
         println!("Upgrading {}:", package.name);
-        package.install_source(branch, &PackageOpts::system_wide(system_wide))?;
+        package.install(branch, &PackageOpts::base_opts(system_wide, from_source))?;
         println!();
     }
 

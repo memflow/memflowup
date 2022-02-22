@@ -26,7 +26,9 @@ pub fn build(
         unsafe_commands,
         ty,
         dev_branch: None,
+        dev_binary_tag: None,
         stable_branch: None,
+        stable_binary_tag: None,
         platforms: None,
     };
 
@@ -35,6 +37,7 @@ pub fn build(
         nocopy,
         system_wide,
         reinstall: true,
+        from_source: true,
     };
 
     package.install_local(&opts)?;

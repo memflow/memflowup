@@ -147,6 +147,15 @@ impl<'a> ScriptCtx<'a> {
         Ok(path_str.into())
     }
 
+    fn github_release_artifact(&mut self, artifact: &str) -> Result<Vec<u8>, Box<EvalAltResult>> {
+        github_api::download_release_artifact(
+            &self.package.repo_root_url,
+            self.package.binary_release_tag(self.branch).unwrap(),
+            artifact,
+        )
+        .map_err(<_>::into)
+    }
+
     fn dkms_install(&mut self, path: String) -> Result<(), Box<EvalAltResult>> {
         Command::new("sudo")
             .args(&["dkms", "install", &path])
@@ -205,32 +214,22 @@ impl<'a> ScriptCtx<'a> {
     fn entry_type(&self) -> EntryType {
         if self.opts.is_local {
             EntryType::LocalPath(self.package.repo_root_url.clone())
-        } else {
+        } else if self.opts.from_source {
             EntryType::GitSource(self.sha.into())
+        } else {
+            EntryType::Binary(self.package.binary_release_tag(self.branch).unwrap().into())
         }
     }
 
-    fn copy_cargo_plugin_artifact(
+    fn write_plugin_artifact(
         &mut self,
-        path: &str,
+        in_data: Vec<u8>,
         artifact: &str,
     ) -> Result<(), Box<EvalAltResult>> {
-        // Mark that we did source installation:
+        // Mark that we did installation:
         *self.installed_release.try_borrow_mut().unwrap() = Some(self.entry_type());
 
-        let mut in_path = PathBuf::from(path);
-        in_path.push("target");
-        in_path.push("release");
-        in_path.push(artifact);
-
-        let stem = in_path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .ok_or("malformed filename")?;
-        let extension = in_path
-            .extension()
-            .and_then(|s| s.to_str())
-            .ok_or("malformed extension")?;
+        let (stem, extension) = artifact.rsplit_once(".").ok_or("invalid artifact passed")?;
 
         let out_filename = if self.opts.is_local {
             format!("{}.{}.{}", stem, arch_str(), extension)
@@ -249,11 +248,15 @@ impl<'a> ScriptCtx<'a> {
             util::create_dir_with_elevation(&out_dir.as_path(), self.opts.system_wide)
                 .map_err(|_| format!("unable to create plugin target directory: {:?}", out_dir))?;
 
-            util::copy_file(&in_path, &out_path, self.opts.system_wide).map_err(|_| {
-                format!("unable to copy plugin from {:?} to {:?}", in_path, out_path)
-            })?;
+            util::write_with_elevation(&out_path, true, |mut f| {
+                f.write_all(&in_data).map_err(<_>::into)
+            })
+            .map_err(|_| "failed to write artifact")?;
 
-            info!("successfully copied {:?} to {:?}", in_path, out_path);
+            util::mark_executable(&out_path, true)
+                .map_err(|_| "failed to make binary executable")?;
+
+            info!("successfully written to {:?}", out_path);
 
             self.installed
                 .try_borrow_mut()
@@ -262,6 +265,27 @@ impl<'a> ScriptCtx<'a> {
         }
 
         Ok(())
+    }
+
+    fn copy_cargo_plugin_artifact(
+        &mut self,
+        path: &str,
+        artifact: &str,
+    ) -> Result<(), Box<EvalAltResult>> {
+        // Mark that we did source installation:
+        *self.installed_release.try_borrow_mut().unwrap() = Some(self.entry_type());
+
+        let mut in_path = PathBuf::from(path);
+        in_path.push("target");
+        in_path.push("release");
+        in_path.push(artifact);
+
+        let buf = util::read_to_end(
+            &mut std::fs::File::open(&in_path).map_err(|_| "failed to open artifact")?,
+            0,
+        )?;
+
+        self.write_plugin_artifact(buf, artifact)
     }
 }
 
@@ -324,7 +348,8 @@ pub fn execute_installer(
     };
 
     // check if we have the latest version installed
-    if !opts.reinstall {
+    // also, we currently have no way of checking whether binaries are up-to-date
+    if !opts.reinstall && opts.from_source {
         let db = load_database(branch, opts.system_wide)?;
         if let Some(p) = db.get(&package.name) {
             if p.ty == ctx.entry_type() {
@@ -370,6 +395,11 @@ pub fn execute_installer(
         .register_result_fn(
             "copy_cargo_plugin_artifact",
             ScriptCtx::copy_cargo_plugin_artifact,
+        )
+        .register_result_fn("write_plugin_artifact", ScriptCtx::write_plugin_artifact)
+        .register_result_fn(
+            "github_release_artifact",
+            ScriptCtx::github_release_artifact,
         )
         .register_result_fn("dkms_install", ScriptCtx::dkms_install)
         .register_result_fn("dkms_install", ScriptCtx::dkms_install_tarball)

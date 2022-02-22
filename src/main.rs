@@ -48,11 +48,13 @@ fn main() -> Result<()> {
             matches.occurrences_of("system") > 0,
             matches.occurrences_of("dev") > 0,
             matches.occurrences_of("reinstall") > 0,
+            matches.occurrences_of("from-source") > 0,
             parse_load_opts(matches),
         ),
         ("list", Some(matches)) => package::list(
             matches.occurrences_of("system") > 0,
             (matches.occurrences_of("dev") > 0).into(),
+            matches.occurrences_of("from-source") > 0,
             parse_load_opts(matches),
         ),
         ("update", Some(matches)) => package::update(
@@ -60,7 +62,7 @@ fn main() -> Result<()> {
             matches.occurrences_of("dev") > 0,
             parse_load_opts(matches),
         ),
-        ("interactive", Some(_)) => setup_mode::setup_mode(parse_load_opts(&matches)),
+        ("interactive", Some(matches)) => setup_mode::setup_mode(parse_load_opts(matches)),
         _ => Ok(()),
     }
 }
@@ -86,6 +88,7 @@ fn parse_args() -> ArgMatches<'static> {
             .arg(Arg::with_name("system").long("system").short("s"))
             .arg(Arg::with_name("dev").long("dev").short("d"))
             .arg(Arg::with_name("reinstall").long("reinstall").short("r"))
+            .arg(Arg::with_name("from-source").long("from-source").short("S"))
             .arg(Arg::with_name("packages").required(true).multiple(true)),
         )
         .subcommand(
@@ -95,6 +98,7 @@ fn parse_args() -> ArgMatches<'static> {
                     .visible_aliases(&["list", "l"]),
             )
             .arg(Arg::with_name("system").long("system").short("s"))
+            .arg(Arg::with_name("from-source").long("from-source").short("S"))
             .arg(Arg::with_name("dev").long("dev").short("d")),
         )
         .subcommand(

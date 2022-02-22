@@ -21,8 +21,7 @@ fn build_from_source(ctx) {
 
 // downloads a binary release of a plugin
 fn install(ctx) {
-	let release = ctx.github_latest_release();
 	let libname = name_to_lib_with_arch(ctx.crate_name());
-	let artifact = download(ctx.github_release_artifact(release, libname));
-	write_plugin_artifact(artifact);
+	let artifact = ctx.github_release_artifact(libname);
+	ctx.write_plugin_artifact(artifact, name_to_lib(ctx.crate_name()));
 }

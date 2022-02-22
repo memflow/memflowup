@@ -7,8 +7,10 @@ pub fn install(
     system_wide: bool,
     dev: bool,
     reinstall: bool,
+    from_source: bool,
     load_opts: PackageLoadOpts,
 ) -> Result<()> {
+    update_index(system_wide)?;
     let packages = load_packages(system_wide, load_opts)?;
 
     let branch: Branch = dev.into();
@@ -18,17 +20,18 @@ pub fn install(
     let opts = PackageOpts {
         reinstall,
         system_wide,
+        from_source,
         ..Default::default()
     };
 
     for package in packages
         .into_iter()
-        .filter(|p| p.is_in_channel(branch))
+        .filter(|p| p.supports_install_mode(branch, from_source))
         .filter(Package::supported_by_platform)
         .filter(|p| to_install.contains(&p.name))
     {
         println!("Installing {}:", package.name);
-        package.install_source(branch, &opts)?;
+        package.install(branch, &opts)?;
         println!();
     }
 

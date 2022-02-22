@@ -118,34 +118,41 @@ pub fn http_download_file(url: &str) -> Result<Vec<u8>, &'static str> {
     Ok(buffer)
 }
 
-fn read_to_end<T: Read>(reader: &mut T, len: usize) -> Result<Vec<u8>, &'static str> {
+pub fn read_to_end<T: Read>(reader: &mut T, len: usize) -> Result<Vec<u8>, &'static str> {
     let mut buffer = vec![];
 
-    let total = Arc::new(AtomicUsize::new(0));
-    let mut reader = ProgressReader::new(reader, |progress: usize| {
-        total.fetch_add(progress, Ordering::SeqCst);
-    });
-    let mut pb = ProgressBar::new(len as u64);
+    if len > 0 {
+        let total = Arc::new(AtomicUsize::new(0));
+        let mut reader = ProgressReader::new(reader, |progress: usize| {
+            total.fetch_add(progress, Ordering::SeqCst);
+        });
+        let mut pb = ProgressBar::new(len as u64);
 
-    let finished = Arc::new(AtomicBool::new(false));
-    let thread = {
-        let finished_thread = finished.clone();
-        let total_thread = total.clone();
+        let finished = Arc::new(AtomicBool::new(false));
+        let thread = {
+            let finished_thread = finished.clone();
+            let total_thread = total.clone();
 
-        std::thread::spawn(move || {
-            while !finished_thread.load(Ordering::Relaxed) {
-                pb.set(total_thread.load(Ordering::SeqCst) as u64);
-                std::thread::sleep(std::time::Duration::from_millis(10));
-            }
-            pb.finish();
-        })
-    };
+            std::thread::spawn(move || {
+                while !finished_thread.load(Ordering::Relaxed) {
+                    pb.set(total_thread.load(Ordering::SeqCst) as u64);
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }
+                pb.finish();
+            })
+        };
 
-    reader
-        .read_to_end(&mut buffer)
-        .map_err(|_| "unable to read from http request")?;
-    finished.store(true, Ordering::Relaxed);
-    thread.join().unwrap();
+        reader
+            .read_to_end(&mut buffer)
+            .map_err(|_| "unable to read from stream")?;
+
+        finished.store(true, Ordering::Relaxed);
+        thread.join().unwrap();
+    } else {
+        reader
+            .read_to_end(&mut buffer)
+            .map_err(|_| "unable to read from stream")?;
+    }
 
     Ok(buffer)
 }
@@ -297,6 +304,48 @@ pub fn copy_file(
             Err(err)
         }
     }
+}
+
+pub fn mark_executable(
+    path: &impl AsRef<Path>,
+    elevate_if_needed: bool,
+) -> Result<(), std::io::Error> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = std::fs::metadata(path)?.permissions();
+        perms.set_mode((perms.mode() | 0o111) & !0o022);
+
+        match std::fs::set_permissions(path, perms) {
+            Err(err) => {
+                if err.kind() == std::io::ErrorKind::PermissionDenied && elevate_if_needed {
+                    info!("Elevated chmod {}", path.as_ref().to_string_lossy(),);
+                    match Command::new("sudo")
+                        .arg("chmod")
+                        .arg("a+x")
+                        .arg(path.as_ref().to_str().ok_or_else(|| {
+                            std::io::Error::new(
+                                err.kind(),
+                                "from path contains invalid characters!",
+                            )
+                        })?)
+                        .stdout(Stdio::inherit())
+                        .stderr(Stdio::inherit())
+                        .output()
+                    {
+                        Ok(_) => return Ok(()),
+                        Err(err) => {
+                            error!("{}", err);
+                        }
+                    };
+                }
+                error!("{}", &err);
+                return Err(err);
+            }
+            Ok(_) => {}
+        }
+    }
+    Ok(())
 }
 
 pub fn config_dir(system_wide: bool) -> PathBuf {
