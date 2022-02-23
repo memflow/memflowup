@@ -29,7 +29,7 @@
 		"repo_root_url": "https://github.com/memflow/memflow-qemu",
 		"_stable_branch": "master",
 		"dev_binary_tag": "nightly",
-		"dev_branch": "next"
+		"dev_branch": "main"
 	},
 	{
 		"name": "memflow-coredump",
@@ -45,7 +45,7 @@
 		"repo_root_url": "https://github.com/memflow/memflow-kcore",
 		"_stable_branch": "master",
 		"dev_binary_tag": "nightly",
-		"dev_branch": "master"
+		"dev_branch": "main"
 	},
 	{
 		"name": "memflow-pcileech",
@@ -62,7 +62,7 @@
 		"platforms": ["linux"],
 		"repo_root_url": "https://github.com/memflow/memflow-kvm",
 		"stable_branch": "master",
-		"dev_branch": "next",
+		"dev_branch": "main",
 		"install_script_path": "install.rhai"
 	}
 ]
