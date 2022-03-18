@@ -117,7 +117,7 @@ impl PackageType {
         match *self {
             PackageType::CorePlugin if system_wide => {
                 if cfg!(unix) {
-                    PathBuf::from("/").join("usr").join("lib").join("memflow")
+                    PathBuf::from("/").join("usr").join("local").join("lib").join("memflow")
                 } else {
                     PathBuf::from("C:\\").join("Program Files").join("memflow")
                 }
