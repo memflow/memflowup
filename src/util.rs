@@ -58,15 +58,15 @@ pub fn user_input(question: &str, options: &[&str], default: usize) -> crate::Re
                 .filter(|(_, o)| o.to_lowercase().starts_with(&input_stripped));
 
             // Return only if there's just a single starts_with match
-            match (iter.next(), iter.next()) {
-                (Some((i, _)), None) => return Ok(i),
-                _ => {}
+            if let (Some((i, _)), None) = (iter.next(), iter.next()) {
+                return Ok(i);
             }
         }
     }
 }
 
 /// Returns the path to a temporary file with the given name
+#[allow(unused)]
 pub fn tmp_file(name: &str) -> String {
     env::temp_dir().join(name).to_string_lossy().to_string()
 }
@@ -118,34 +118,41 @@ pub fn http_download_file(url: &str) -> Result<Vec<u8>, &'static str> {
     Ok(buffer)
 }
 
-fn read_to_end<T: Read>(reader: &mut T, len: usize) -> Result<Vec<u8>, &'static str> {
+pub fn read_to_end<T: Read>(reader: &mut T, len: usize) -> Result<Vec<u8>, &'static str> {
     let mut buffer = vec![];
 
-    let total = Arc::new(AtomicUsize::new(0));
-    let mut reader = ProgressReader::new(reader, |progress: usize| {
-        total.fetch_add(progress, Ordering::SeqCst);
-    });
-    let mut pb = ProgressBar::new(len as u64);
+    if len > 0 {
+        let total = Arc::new(AtomicUsize::new(0));
+        let mut reader = ProgressReader::new(reader, |progress: usize| {
+            total.fetch_add(progress, Ordering::SeqCst);
+        });
+        let mut pb = ProgressBar::new(len as u64);
 
-    let finished = Arc::new(AtomicBool::new(false));
-    let thread = {
-        let finished_thread = finished.clone();
-        let total_thread = total.clone();
+        let finished = Arc::new(AtomicBool::new(false));
+        let thread = {
+            let finished_thread = finished.clone();
+            let total_thread = total.clone();
 
-        std::thread::spawn(move || {
-            while !finished_thread.load(Ordering::Relaxed) {
-                pb.set(total_thread.load(Ordering::SeqCst) as u64);
-                std::thread::sleep(std::time::Duration::from_millis(10));
-            }
-            pb.finish();
-        })
-    };
+            std::thread::spawn(move || {
+                while !finished_thread.load(Ordering::Relaxed) {
+                    pb.set(total_thread.load(Ordering::SeqCst) as u64);
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }
+                pb.finish();
+            })
+        };
 
-    reader
-        .read_to_end(&mut buffer)
-        .map_err(|_| "unable to read from http request")?;
-    finished.store(true, Ordering::Relaxed);
-    thread.join().unwrap();
+        reader
+            .read_to_end(&mut buffer)
+            .map_err(|_| "unable to read from stream")?;
+
+        finished.store(true, Ordering::Relaxed);
+        thread.join().unwrap();
+    } else {
+        reader
+            .read_to_end(&mut buffer)
+            .map_err(|_| "unable to read from stream")?;
+    }
 
     Ok(buffer)
 }
@@ -166,7 +173,7 @@ pub fn create_dir_with_elevation(path: impl AsRef<Path>, elevate: bool) -> crate
                     .stderr(Stdio::inherit())
                     .output()
                 {
-                    Ok(_) => return Ok(()),
+                    Ok(_) => Ok(()),
                     Err(err) => {
                         error!("{}", err);
                         Err(err.into())
@@ -200,13 +207,13 @@ pub fn write_with_elevation(
     }
 }
 
-pub fn zip_unpack(in_buf: &[u8], out_dir: &PathBuf, strip_path: i64) -> Result<(), String> {
-    let zip_cursor = std::io::Cursor::new(&in_buf[..]);
+pub fn zip_unpack(in_buf: &[u8], out_dir: &Path, strip_path: i64) -> Result<(), String> {
+    let zip_cursor = std::io::Cursor::new(in_buf);
     let mut zip_archive = match ZipArchive::new(zip_cursor) {
         Ok(archive) => archive,
         Err(err) => {
             error!("{:?}", err);
-            return Err(format!("{:?}", err).into());
+            return Err(format!("{:?}", err));
         }
     };
 
@@ -266,7 +273,6 @@ pub fn copy_file(
         to.as_ref().to_string_lossy(),
     );
 
-    // std::fs::create_dir_all(memflow_user_path.clone()).ok(); // TODO: handle file exists error and clean folder
     match std::fs::copy(from, to) {
         Ok(_) => Ok(()),
         Err(err) => {
@@ -295,9 +301,51 @@ pub fn copy_file(
                 };
             }
             error!("{}", &err);
-            return Err(err);
+            Err(err)
         }
     }
+}
+
+pub fn mark_executable(
+    path: &impl AsRef<Path>,
+    elevate_if_needed: bool,
+) -> Result<(), std::io::Error> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = std::fs::metadata(path)?.permissions();
+        perms.set_mode((perms.mode() | 0o111) & !0o022);
+
+        match std::fs::set_permissions(path, perms) {
+            Err(err) => {
+                if err.kind() == std::io::ErrorKind::PermissionDenied && elevate_if_needed {
+                    info!("Elevated chmod {}", path.as_ref().to_string_lossy(),);
+                    match Command::new("sudo")
+                        .arg("chmod")
+                        .arg("a+x")
+                        .arg(path.as_ref().to_str().ok_or_else(|| {
+                            std::io::Error::new(
+                                err.kind(),
+                                "from path contains invalid characters!",
+                            )
+                        })?)
+                        .stdout(Stdio::inherit())
+                        .stderr(Stdio::inherit())
+                        .output()
+                    {
+                        Ok(_) => return Ok(()),
+                        Err(err) => {
+                            error!("{}", err);
+                        }
+                    };
+                }
+                error!("{}", &err);
+                return Err(err);
+            }
+            Ok(_) => {}
+        }
+    }
+    Ok(())
 }
 
 pub fn config_dir(system_wide: bool) -> PathBuf {
@@ -318,6 +366,7 @@ pub fn config_dir(system_wide: bool) -> PathBuf {
     }
 }
 
+#[allow(unused)]
 pub fn executable_dir(system_wide: bool) -> PathBuf {
     if system_wide {
         #[cfg(not(windows))]

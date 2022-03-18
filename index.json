@@ -11,6 +11,7 @@
 		"name": "memflow-win32",
 		"ty": "CorePlugin",
 		"repo_root_url": "https://github.com/memflow/memflow-win32",
+		"dev_binary_tag": "nightly",
 		"dev_branch": "main"
 	},
 	{
@@ -18,6 +19,7 @@
 		"ty": "CorePlugin",
 		"platforms": ["linux", "windows"],
 		"repo_root_url": "https://github.com/memflow/memflow-native",
+		"dev_binary_tag": "nightly",
 		"dev_branch": "main"
 	},
 	{
@@ -25,14 +27,25 @@
 		"ty": "CorePlugin",
 		"platforms": ["linux", "windows"],
 		"repo_root_url": "https://github.com/memflow/memflow-qemu",
-		"stable_branch": "master",
-		"dev_branch": "next"
+		"_stable_branch": "master",
+		"dev_binary_tag": "nightly",
+		"dev_branch": "main"
 	},
 	{
 		"name": "memflow-coredump",
 		"ty": "CorePlugin",
 		"repo_root_url": "https://github.com/memflow/memflow-coredump",
-		"stable_branch": "master"
+		"dev_binary_tag": "nightly",
+		"dev_branch": "main"
+	},
+	{
+		"name": "memflow-kcore",
+		"ty": "CorePlugin",
+		"platforms": ["linux"],
+		"repo_root_url": "https://github.com/memflow/memflow-kcore",
+		"_stable_branch": "master",
+		"dev_binary_tag": "nightly",
+		"dev_branch": "main"
 	},
 	{
 		"name": "memflow-pcileech",
@@ -48,8 +61,8 @@
 		"ty": "CorePlugin",
 		"platforms": ["linux"],
 		"repo_root_url": "https://github.com/memflow/memflow-kvm",
-		"_stable_branch": "master",
-		"dev_branch": "next",
+		"stable_branch": "master",
+		"dev_branch": "main",
 		"install_script_path": "install.rhai"
 	}
 ]

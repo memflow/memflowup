@@ -4,39 +4,44 @@ This tool is meant to provide a really quick way to setup various memflow connec
 
 Install through cargo:
 
-```
-cargo install memflowup --version ^0.1.0-beta
+```sh
+curl --proto '=https' --tlsv1.2 -sSf https://sh.memflow.io | sh
 ```
 
 ## Usage
 
 See help:
 
-```
+```sh
 memflowup -h
 ```
 
 Run interactively:
 
-```
+```sh
 memflowup interactive
 ```
 
 Install a set of connectors non-interactively:
 
-```
-memflowup install memflow-qemu memflow-coredump
-```
-
-Update all connectors:
-
-```
-TODO: NOT YET IMPLEMENTED
+```sh
+memflowup install memflow-qemu-procfs memflow-coredump
 ```
 
-Reinstall all connectors:
+Same with development (0.2) channel:
+
+```sh
+memflowup install -d memflow-qemu memflow-coredump
+```
+
+Update all connectors that are installed system-wide (`-s`) from development channel (`-d`):
+
+```sh
+memflowup update -s -d
+```
+
+Reinstall a connector:
 
 ```
-TODO: NOT YET IMPLEMENTED
+memflowup install memflow-kvm -s -d --reinstall
 ```
-

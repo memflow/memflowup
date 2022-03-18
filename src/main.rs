@@ -9,6 +9,7 @@ mod util;
 
 use clap::*;
 use log::Level;
+use package::PackageLoadOpts;
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -46,18 +47,30 @@ fn main() -> Result<()> {
             &matches.values_of_lossy("packages").unwrap(),
             matches.occurrences_of("system") > 0,
             matches.occurrences_of("dev") > 0,
+            matches.occurrences_of("reinstall") > 0,
+            matches.occurrences_of("from-source") > 0,
+            parse_load_opts(matches),
         ),
         ("list", Some(matches)) => package::list(
             matches.occurrences_of("system") > 0,
             (matches.occurrences_of("dev") > 0).into(),
+            matches.occurrences_of("from-source") > 0,
+            parse_load_opts(matches),
         ),
         ("update", Some(matches)) => package::update(
             matches.occurrences_of("system") > 0,
-            (matches.occurrences_of("dev") > 0).into(),
+            matches.occurrences_of("dev") > 0,
+            parse_load_opts(matches),
         ),
-        ("interactive", Some(_)) => setup_mode::setup_mode(),
+        ("interactive", Some(matches)) => setup_mode::setup_mode(parse_load_opts(matches)),
         _ => Ok(()),
     }
+}
+
+fn add_package_opts<'a, 'b>(app: App<'a, 'b>) -> App<'a, 'b> {
+    app.arg(Arg::with_name("ignore-user-index").long("ignore-user-index"))
+        .arg(Arg::with_name("ignore-upstream-index").long("ignore-upstream-index"))
+        .arg(Arg::with_name("ignore-builtin-index").long("ignore-builtin-index"))
 }
 
 fn parse_args() -> ArgMatches<'static> {
@@ -67,32 +80,41 @@ fn parse_args() -> ArgMatches<'static> {
         .author(crate_authors!())
         .arg(Arg::with_name("verbose").short("v").multiple(true))
         .subcommand(
-            SubCommand::with_name("install")
-                .about("Single-shot install")
-                .visible_aliases(&["install", "i"])
-                .arg(Arg::with_name("system").long("system").short("s"))
-                .arg(Arg::with_name("dev").long("dev").short("d"))
-                .arg(Arg::with_name("packages").required(true).multiple(true)),
+            add_package_opts(
+                SubCommand::with_name("install")
+                    .about("Single-shot install")
+                    .visible_aliases(&["install", "i"]),
+            )
+            .arg(Arg::with_name("system").long("system").short("s"))
+            .arg(Arg::with_name("dev").long("dev").short("d"))
+            .arg(Arg::with_name("reinstall").long("reinstall").short("r"))
+            .arg(Arg::with_name("from-source").long("from-source").short("S"))
+            .arg(Arg::with_name("packages").required(true).multiple(true)),
         )
         .subcommand(
-            SubCommand::with_name("list")
-                .about("Lists all installed packages")
-                .visible_aliases(&["list", "l"])
-                .arg(Arg::with_name("system").long("system").short("s"))
-                .arg(Arg::with_name("dev").long("dev").short("d")),
+            add_package_opts(
+                SubCommand::with_name("list")
+                    .about("Lists all installed packages")
+                    .visible_aliases(&["list", "l"]),
+            )
+            .arg(Arg::with_name("system").long("system").short("s"))
+            .arg(Arg::with_name("from-source").long("from-source").short("S"))
+            .arg(Arg::with_name("dev").long("dev").short("d")),
         )
         .subcommand(
-            SubCommand::with_name("update")
-                .about("Updates all installed packages")
-                .visible_aliases(&["update", "u"])
-                .arg(Arg::with_name("system").long("system").short("s"))
-                .arg(Arg::with_name("dev").long("dev").short("d")),
+            add_package_opts(
+                SubCommand::with_name("update")
+                    .about("Updates all installed packages")
+                    .visible_aliases(&["update", "u"]),
+            )
+            .arg(Arg::with_name("system").long("system").short("s"))
+            .arg(Arg::with_name("dev").long("dev").short("d")),
         )
-        .subcommand(
+        .subcommand(add_package_opts(
             SubCommand::with_name("interactive")
                 .about("Interactive install")
                 .visible_aliases(&["interactive", "I"]),
-        )
+        ))
         .subcommand(
             SubCommand::with_name("build")
                 .about("Build and install a local project")
@@ -147,4 +169,12 @@ fn parse_args() -> ArgMatches<'static> {
                 ),
         )
         .get_matches()
+}
+
+fn parse_load_opts(matches: &ArgMatches) -> PackageLoadOpts {
+    let ignore_user = matches.occurrences_of("ignore-user-index") > 0;
+    let ignore_upstream = matches.occurrences_of("ignore-upstream-index") > 0;
+    let ignore_builtin = matches.occurrences_of("ignore-builtin-index") > 0;
+
+    PackageLoadOpts::new(ignore_user, ignore_upstream, ignore_builtin)
 }
