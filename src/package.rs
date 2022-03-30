@@ -135,6 +135,25 @@ impl Package {
             _ => None,
         }
     }
+
+    pub fn available_modes(&self) -> Vec<&str> {
+        let mut modes = vec![];
+        if self.is_in_channel(Branch::Stable) {
+            if self.binary_release_tag(Branch::Stable).is_some() {
+                modes.push("stable/binary");
+            }
+            modes.push("stable/git");
+        }
+
+        if self.is_in_channel(Branch::Dev) {
+            if self.binary_release_tag(Branch::Stable).is_some() {
+                modes.push("dev/binary");
+            }
+            modes.push("dev/git");
+        }
+
+        modes
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug)]
@@ -289,23 +308,13 @@ pub fn list_all(system_wide: bool, load_opts: PackageLoadOpts) -> Result<()> {
         .filter(|p| p.supported_by_platform())
         .enumerate()
     {
-        print!("{}. {} - {:?}", i, package.name, package.ty);
-
-        let mut kw = vec![];
-        if package.is_in_channel(Branch::Stable) {
-            if package.binary_release_tag(Branch::Stable).is_some() {
-                kw.push("stable/binary");
-            }
-            kw.push("stable/git");
-        }
-        if package.is_in_channel(Branch::Dev) {
-            if package.binary_release_tag(Branch::Stable).is_some() {
-                kw.push("dev/binary");
-            }
-            kw.push("dev/git");
-        }
-
-        print!(" ({})", kw.join(", "));
+        print!(
+            "{}. {} - {:?} ({})",
+            i,
+            package.name,
+            package.ty,
+            package.available_modes().join(", ")
+        );
 
         match db_stable.get(&package.name) {
             Some(DatabaseEntry {

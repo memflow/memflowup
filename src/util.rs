@@ -73,10 +73,9 @@ pub fn tmp_file(name: &str) -> String {
 
 /// Queries the URL and returns the deserialized response.
 pub fn http_get_json<T: DeserializeOwned>(url: &str) -> Result<T, &'static str> {
-    let resp = ureq::get(url).call();
-    if !resp.ok() {
-        return Err("unable to download file");
-    }
+    let resp = ureq::get(url)
+        .call()
+        .map_err(|_| "unable to download file")?;
 
     let mut reader = resp.into_reader();
 
@@ -91,10 +90,9 @@ pub fn http_get_json<T: DeserializeOwned>(url: &str) -> Result<T, &'static str> 
 /// Downloads the specified file and returns a byte buffer containing the data.
 pub fn http_download_file(url: &str) -> Result<Vec<u8>, &'static str> {
     info!("downloading file from {}", url);
-    let resp = ureq::get(url).call();
-    if !resp.ok() {
-        return Err("unable to download file");
-    }
+    let resp = ureq::get(url)
+        .call()
+        .map_err(|_| "unable to download file")?;
 
     let buffer = if resp.has("Content-Length") {
         let len = resp

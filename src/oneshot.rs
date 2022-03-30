@@ -15,8 +15,6 @@ pub fn install(
 
     let branch: Branch = dev.into();
 
-    println!("using {} channel", branch.filename());
-
     let opts = PackageOpts {
         reinstall,
         system_wide,
@@ -27,29 +25,41 @@ pub fn install(
     for install_name in to_install.iter() {
         let target = packages
             .iter()
-            .filter(|p| p.supports_install_mode(branch, from_source))
-            .filter(|&p| Package::supported_by_platform(p))
-            .find(|p| p.name == install_name.as_ref());
+            .filter(|p| p.supported_by_platform())
+            .find(|p| install_name == p.name.as_str());
 
-        let mut failure = false;
+        let mut not_found = false;
         match target {
-            Some(target) => {
+            Some(target) if target.supports_install_mode(branch, from_source) => {
                 println!("Installing {}:", target.name);
                 target.install(branch, &opts)?;
                 println!();
             }
-            None => {
+            Some(target) => {
                 println!(
-                    "Package '{}' was not found in '{}' channel.",
+                    "Package '{}' was not found in '{}' channel via '{}' installation.",
                     install_name,
-                    branch.filename()
+                    branch.filename(),
+                    if from_source { "git" } else { "binary" }
                 );
-                failure = true;
+                println!(
+                    "'{}' is only available via the following channels: {}",
+                    install_name,
+                    target.available_modes().join(", ")
+                );
+                println!("Use 'memflowup install --help' to see additional flags for choosing a channel.");
+            }
+            None => {
+                println!("Package '{}' was not found.", install_name,);
+                not_found = true;
             }
         }
 
-        if failure {
-            println!("Some packages failed to install, try 'memflowup list' to see all available packages.");
+        if not_found {
+            println!(
+                "Some packages failed to install, try 'memflowup {}' to see all available packages.",
+                if system_wide { "list -s" } else { "list" }
+            );
         }
     }
 

@@ -34,7 +34,7 @@ fn main() -> Result<()> {
     .unwrap();
 
     match matches.subcommand() {
-        ("build", Some(matches)) => build_mode::build(
+        Some(("build", matches)) => build_mode::build(
             matches.value_of("name").unwrap(),
             matches.value_of("path").unwrap(),
             matches.value_of("script"),
@@ -43,7 +43,7 @@ fn main() -> Result<()> {
             matches.occurrences_of("sys") > 0,
             matches.occurrences_of("nocopy") > 0,
         ),
-        ("install", Some(matches)) => oneshot::install(
+        Some(("install", matches)) => oneshot::install(
             &matches.values_of_lossy("packages").unwrap(),
             matches.occurrences_of("system") > 0,
             matches.occurrences_of("dev") > 0,
@@ -51,114 +51,114 @@ fn main() -> Result<()> {
             matches.occurrences_of("from-source") > 0,
             parse_load_opts(matches),
         ),
-        ("list", Some(matches)) => package::list_all(
+        Some(("list", matches)) => package::list_all(
             matches.occurrences_of("system") > 0,
             parse_load_opts(matches),
         ),
-        ("update", Some(matches)) => package::update(
+        Some(("update", matches)) => package::update(
             matches.occurrences_of("system") > 0,
             matches.occurrences_of("dev") > 0,
             parse_load_opts(matches),
         ),
-        ("interactive", Some(matches)) => setup_mode::setup_mode(parse_load_opts(matches)),
+        Some(("interactive", matches)) => setup_mode::setup_mode(parse_load_opts(matches)),
         _ => Ok(()),
     }
 }
 
-fn add_package_opts<'a, 'b>(app: App<'a, 'b>) -> App<'a, 'b> {
-    app.arg(Arg::with_name("ignore-user-index").long("ignore-user-index"))
-        .arg(Arg::with_name("ignore-upstream-index").long("ignore-upstream-index"))
-        .arg(Arg::with_name("ignore-builtin-index").long("ignore-builtin-index"))
+fn add_package_opts<'a, 'b>(app: Command) -> Command {
+    app.arg(Arg::new("ignore-user-index").long("ignore-user-index"))
+        .arg(Arg::new("ignore-upstream-index").long("ignore-upstream-index"))
+        .arg(Arg::new("ignore-builtin-index").long("ignore-builtin-index"))
 }
 
-fn parse_args() -> ArgMatches<'static> {
-    App::new("memflowup")
-        .setting(AppSettings::ArgRequiredElseHelp)
+fn parse_args() -> ArgMatches {
+    Command::new("memflowup")
+        .arg_required_else_help(true)
         .version(crate_version!())
         .author(crate_authors!())
-        .arg(Arg::with_name("verbose").short("v").multiple(true))
+        .arg(Arg::new("verbose").short('v').multiple_occurrences(true))
         .subcommand(
             add_package_opts(
-                SubCommand::with_name("install")
+                Command::new("install")
                     .about("Single-shot install")
                     .visible_aliases(&["install", "i"]),
             )
-            .arg(Arg::with_name("system").long("system").short("s"))
-            .arg(Arg::with_name("dev").long("dev").short("d"))
-            .arg(Arg::with_name("reinstall").long("reinstall").short("r"))
-            .arg(Arg::with_name("from-source").long("from-source").short("S"))
-            .arg(Arg::with_name("packages").required(true).multiple(true)),
+            .arg(Arg::new("system").long("system").short('s'))
+            .arg(Arg::new("dev").long("dev").short('d'))
+            .arg(Arg::new("reinstall").long("reinstall").short('r'))
+            .arg(Arg::new("from-source").long("from-source").short('S'))
+            .arg(Arg::new("packages").required(true).multiple_values(true)),
         )
         .subcommand(
             add_package_opts(
-                SubCommand::with_name("list")
+                Command::new("list")
                     .about("Lists all installed packages")
                     .visible_aliases(&["list", "l"]),
             )
-            .arg(Arg::with_name("system").long("system").short("s")),
+            .arg(Arg::new("system").long("system").short('s')),
         )
         .subcommand(
             add_package_opts(
-                SubCommand::with_name("update")
+                Command::new("update")
                     .about("Updates all installed packages")
                     .visible_aliases(&["update", "u"]),
             )
-            .arg(Arg::with_name("system").long("system").short("s"))
-            .arg(Arg::with_name("dev").long("dev").short("d")),
+            .arg(Arg::new("system").long("system").short('s'))
+            .arg(Arg::new("dev").long("dev").short('d')),
         )
         .subcommand(add_package_opts(
-            SubCommand::with_name("interactive")
+            Command::new("interactive")
                 .about("Interactive install")
                 .visible_aliases(&["interactive", "I"]),
         ))
         .subcommand(
-            SubCommand::with_name("build")
+            Command::new("build")
                 .about("Build and install a local project")
                 .visible_aliases(&["build", "b"])
                 .arg(
-                    Arg::with_name("name")
+                    Arg::new("name")
                         .long("name")
-                        .short("n")
+                        .short('n')
                         .takes_value(true)
                         .required(true),
                 )
                 .arg(
-                    Arg::with_name("path")
+                    Arg::new("path")
                         .long("path")
-                        .short("p")
+                        .short('p')
                         .takes_value(true)
                         .default_value("."),
                 )
                 .arg(
-                    Arg::with_name("script")
+                    Arg::new("script")
                         .long("script")
-                        .short("s")
+                        .short('s')
                         .takes_value(true)
                         .required(false),
                 )
                 .arg(
-                    Arg::with_name("type")
+                    Arg::new("type")
                         .long("type")
-                        .short("t")
+                        .short('t')
                         .takes_value(true)
                         .default_value("core_plugin"),
                 )
                 .arg(
-                    Arg::with_name("unsafe")
+                    Arg::new("unsafe")
                         .long("unsafe")
-                        .short("u")
+                        .short('u')
                         .takes_value(false)
                         .required(false),
                 )
                 .arg(
-                    Arg::with_name("sys")
+                    Arg::new("sys")
                         .long("sys")
-                        .short("g")
+                        .short('g')
                         .takes_value(false)
                         .required(false),
                 )
                 .arg(
-                    Arg::with_name("nocopy")
+                    Arg::new("nocopy")
                         .long("nocopy")
                         .takes_value(false)
                         .required(false),
