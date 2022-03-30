@@ -24,15 +24,33 @@ pub fn install(
         ..Default::default()
     };
 
-    for package in packages
-        .into_iter()
-        .filter(|p| p.supports_install_mode(branch, from_source))
-        .filter(Package::supported_by_platform)
-        .filter(|p| to_install.contains(&p.name))
-    {
-        println!("Installing {}:", package.name);
-        package.install(branch, &opts)?;
-        println!();
+    for install_name in to_install.iter() {
+        let target = packages
+            .iter()
+            .filter(|p| p.supports_install_mode(branch, from_source))
+            .filter(|&p| Package::supported_by_platform(p))
+            .find(|p| p.name == install_name.as_ref());
+
+        let mut failure = false;
+        match target {
+            Some(target) => {
+                println!("Installing {}:", target.name);
+                target.install(branch, &opts)?;
+                println!();
+            }
+            None => {
+                println!(
+                    "Package '{}' was not found in '{}' channel.",
+                    install_name,
+                    branch.filename()
+                );
+                failure = true;
+            }
+        }
+
+        if failure {
+            println!("Some packages failed to install, try 'memflowup list' to see all available packages.");
+        }
     }
 
     Ok(())
