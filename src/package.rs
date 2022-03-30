@@ -272,6 +272,93 @@ pub fn load_packages(system_wide: bool, load_opts: PackageLoadOpts) -> Result<Ve
     Ok(ret)
 }
 
+pub fn list_all(system_wide: bool, load_opts: PackageLoadOpts) -> Result<()> {
+    if !load_opts.ignore_upstream {
+        update_index(system_wide)?;
+    }
+
+    let packages = load_packages(system_wide, load_opts)?;
+
+    let db_stable = load_database(Branch::Stable, system_wide)?;
+    let db_dev = load_database(Branch::Dev, system_wide)?;
+
+    println!("Available packages:");
+
+    for (i, package) in packages
+        .iter()
+        .filter(|p| p.supported_by_platform())
+        .enumerate()
+    {
+        print!("{}. {} - {:?}", i, package.name, package.ty);
+
+        let mut kw = vec![];
+        if package.is_in_channel(Branch::Stable) {
+            if package.binary_release_tag(Branch::Stable).is_some() {
+                kw.push("stable/binary");
+            }
+            kw.push("stable/git");
+        }
+        if package.is_in_channel(Branch::Dev) {
+            if package.binary_release_tag(Branch::Stable).is_some() {
+                kw.push("dev/binary");
+            }
+            kw.push("dev/git");
+        }
+
+        print!(" ({})", kw.join(", "));
+
+        match db_stable.get(&package.name) {
+            Some(DatabaseEntry {
+                ty: EntryType::GitSource(hash),
+                ..
+            }) => print!(
+                " [installed: stable/git {}]",
+                hash.chars().take(6).collect::<String>()
+            ),
+            Some(DatabaseEntry {
+                ty: EntryType::Binary(tag),
+                ..
+            }) => print!(" [installed: stable/binary {}]", tag),
+            Some(DatabaseEntry {
+                ty: EntryType::LocalPath(tag),
+                ..
+            }) => print!(" [installed: stable/path {}]", tag),
+            Some(DatabaseEntry {
+                ty: EntryType::Crates(version),
+                ..
+            }) => print!(" [installed: stable/crates.io {}]", version),
+            None => {}
+        }
+
+        match db_dev.get(&package.name) {
+            Some(DatabaseEntry {
+                ty: EntryType::GitSource(hash),
+                ..
+            }) => print!(
+                " [installed: dev/git {}]",
+                hash.chars().take(6).collect::<String>()
+            ),
+            Some(DatabaseEntry {
+                ty: EntryType::Binary(tag),
+                ..
+            }) => print!(" [installed: dev/binary {}]", tag),
+            Some(DatabaseEntry {
+                ty: EntryType::LocalPath(tag),
+                ..
+            }) => print!(" [installed: dev/path {}]", tag),
+            Some(DatabaseEntry {
+                ty: EntryType::Crates(version),
+                ..
+            }) => print!(" [installed: dev/crates.io {}]", version),
+            None => {}
+        }
+
+        println!();
+    }
+
+    Ok(())
+}
+
 pub fn list(
     system_wide: bool,
     branch: Branch,
