@@ -24,12 +24,12 @@ const CRC: Crc<u64> = Crc::<u64>::new(&CRC_64_GO_ISO);
 
 /// Prints info
 fn info(s: &str) {
-    info!("{}", s);
+    println!("{}", s);
 }
 
 /// Prints an error
 fn error(s: &str) {
-    error!("{}", s);
+    println!("ERROR: {}", s);
 }
 
 /// Executes cargo with the given flags
