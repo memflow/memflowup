@@ -27,7 +27,7 @@
 		"ty": "CorePlugin",
 		"platforms": ["linux", "windows"],
 		"repo_root_url": "https://github.com/memflow/memflow-qemu",
-		"_stable_branch": "0.1.5",
+		"stable_branch": "0.1.5",
 		"dev_binary_tag": "nightly",
 		"dev_branch": "main"
 	},
@@ -35,7 +35,7 @@
 		"name": "memflow-coredump",
 		"ty": "CorePlugin",
 		"repo_root_url": "https://github.com/memflow/memflow-coredump",
-		"_stable_branch": "0.1.4",
+		"stable_branch": "0.1.4",
 		"dev_binary_tag": "nightly",
 		"dev_branch": "main"
 	},
@@ -62,7 +62,7 @@
 		"ty": "CorePlugin",
 		"platforms": ["linux"],
 		"repo_root_url": "https://github.com/memflow/memflow-kvm",
-		"stable_branch": "master",
+		"stable_branch": "v0.1.5",
 		"dev_branch": "main",
 		"install_script_path": "install.rhai"
 	}
