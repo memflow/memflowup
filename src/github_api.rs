@@ -51,6 +51,14 @@ pub struct Branch {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct Tag {
+    #[serde(rename = "ref")]
+    pub name: String,
+    #[serde(rename = "object")]
+    pub commit: Commit,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Commit {
     pub sha: String,
 }
@@ -110,6 +118,18 @@ pub fn get_branch(url: &str, branch: &str) -> Result<Branch, &'static str> {
         "{}/branches/{}",
         url.replace("github.com", "api.github.com/repos"),
         branch
+    );
+
+    info!("Getting branch from {}", url);
+
+    util::http_get_json(&url)
+}
+
+pub fn get_tag(url: &str, tag: &str) -> Result<Tag, &'static str> {
+    let url = format!(
+        "{}/git/ref/tags/{}",
+        url.replace("github.com", "api.github.com/repos"),
+        tag
     );
 
     info!("Getting branch from {}", url);

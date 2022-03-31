@@ -27,7 +27,7 @@
 		"ty": "CorePlugin",
 		"platforms": ["linux", "windows"],
 		"repo_root_url": "https://github.com/memflow/memflow-qemu",
-		"stable_branch": "0.1.5",
+		"_stable_branch": "0.1.5",
 		"dev_binary_tag": "nightly",
 		"dev_branch": "main"
 	},
@@ -62,7 +62,7 @@
 		"ty": "CorePlugin",
 		"platforms": ["linux"],
 		"repo_root_url": "https://github.com/memflow/memflow-kvm",
-		"stable_branch": "v0.1.5",
+		"_stable_branch": "v0.1.5",
 		"dev_branch": "main",
 		"install_script_path": "install.rhai"
 	}

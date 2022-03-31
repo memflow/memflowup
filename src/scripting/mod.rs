@@ -332,9 +332,13 @@ pub fn execute_installer(
     let sha = if opts.is_local {
         "LOCAL".to_string()
     } else {
-        let branch =
-            github_api::get_branch(&package.repo_root_url, package.branch(branch).unwrap())?;
-        branch.commit.sha
+        // first we try to read the branch name, after that we try and read the tag name
+        github_api::get_branch(&package.repo_root_url, package.branch(branch).unwrap())
+            .map(|b| b.commit.sha)
+            .or_else(|_| {
+                github_api::get_tag(&package.repo_root_url, package.branch(branch).unwrap())
+                    .map(|t| t.commit.sha)
+            })?
     };
 
     let ctx = ScriptCtx {
