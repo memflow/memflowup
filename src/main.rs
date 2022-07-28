@@ -44,7 +44,7 @@ fn main() -> Result<()> {
             matches.occurrences_of("nocopy") > 0,
         ),
         Some(("install", matches)) => oneshot::install(
-            &matches.values_of_lossy("packages").unwrap(),
+            &matches.get_many("packages").unwrap().cloned().collect::<Vec<_>>(),
             matches.occurrences_of("system") > 0,
             matches.occurrences_of("dev") > 0,
             matches.occurrences_of("reinstall") > 0,
