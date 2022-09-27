@@ -391,27 +391,27 @@ pub fn execute_installer(
 
     engine
         .register_type::<ScriptCtx>()
-        .register_result_fn("download_repository", ScriptCtx::download_repository)
-        .register_result_fn("clone_repository", ScriptCtx::clone_repository)
-        .register_result_fn("extract", ScriptCtx::extract)
+        .register_fn("download_repository", ScriptCtx::download_repository)
+        .register_fn("clone_repository", ScriptCtx::clone_repository)
+        .register_fn("extract", ScriptCtx::extract)
         .register_fn("crate_name", ScriptCtx::crate_name)
         .register_fn("build_path", ScriptCtx::build_path)
-        .register_result_fn(
+        .register_fn(
             "copy_cargo_plugin_artifact",
             ScriptCtx::copy_cargo_plugin_artifact,
         )
-        .register_result_fn("write_plugin_artifact", ScriptCtx::write_plugin_artifact)
-        .register_result_fn(
+        .register_fn("write_plugin_artifact", ScriptCtx::write_plugin_artifact)
+        .register_fn(
             "github_release_artifact",
             ScriptCtx::github_release_artifact,
         )
-        .register_result_fn("dkms_install", ScriptCtx::dkms_install)
-        .register_result_fn("dkms_install", ScriptCtx::dkms_install_tarball)
+        .register_fn("dkms_install", ScriptCtx::dkms_install)
+        .register_fn("dkms_install", ScriptCtx::dkms_install_tarball)
         .register_fn("info", info)
         .register_fn("error", error)
         .register_fn("name_to_lib", name2lib)
         .register_fn("name_to_lib_with_arch", name2lib_with_arch)
-        .register_result_fn("cargo", cargo);
+        .register_fn("cargo", cargo);
 
     let mut scope = Scope::new();
     let ast = engine.compile_with_scope(&scope, script).unwrap();
