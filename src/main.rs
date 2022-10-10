@@ -96,12 +96,13 @@ fn parse_args() -> ArgMatches {
             add_package_opts(
                 Command::new("install")
                     .about("Single-shot install")
-                    .short_flag('i'),
+                    .visible_alias("i"),
             )
             .arg(
                 Arg::new("system")
                     .long("system")
                     .short('s')
+                    .help("Enables system-wide installation for all users")
                     .action(ArgAction::SetTrue),
             )
             .arg(
@@ -132,12 +133,13 @@ fn parse_args() -> ArgMatches {
             add_package_opts(
                 Command::new("list")
                     .about("Lists all installed packages")
-                    .short_flag('l'),
+                    .visible_alias("l"),
             )
             .arg(
                 Arg::new("system")
                     .long("system")
                     .short('s')
+                    .help("Enables system-wide installation for all users")
                     .action(ArgAction::SetTrue),
             ),
         )
@@ -145,12 +147,13 @@ fn parse_args() -> ArgMatches {
             add_package_opts(
                 Command::new("update")
                     .about("Updates all installed packages")
-                    .short_flag('u'),
+                    .visible_alias("u"),
             )
             .arg(
                 Arg::new("system")
                     .long("system")
                     .short('s')
+                    .help("Enables system-wide installation for all users")
                     .action(ArgAction::SetTrue),
             )
             .arg(
@@ -166,7 +169,7 @@ fn parse_args() -> ArgMatches {
         .subcommand(
             Command::new("build")
                 .about("Build and install a local project")
-                .short_flag('b')
+                .visible_alias("b")
                 .arg(Arg::new("name").long("name").short('n').required(true))
                 .arg(Arg::new("path").long("path").short('p').default_value("."))
                 .arg(Arg::new("script").long("script").short('s'))
