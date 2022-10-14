@@ -246,7 +246,7 @@ pub fn load_packages(system_wide: bool, load_opts: PackageLoadOpts) -> Result<Ve
 
         for p in fs::read_dir(&path).into_iter().flatten() {
             let p = p?.path();
-            if p.extension().map(|s| s.to_str()).flatten() == Some("json") {
+            if p.extension().and_then(|s| s.to_str()) == Some("json") {
                 let file = fs::File::open(p)?;
                 let parsed: Vec<Package> = serde_json::from_reader(file)?;
                 ret.extend(parsed);

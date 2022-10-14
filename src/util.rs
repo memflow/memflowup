@@ -314,33 +314,27 @@ pub fn mark_executable(
         let mut perms = std::fs::metadata(path)?.permissions();
         perms.set_mode((perms.mode() | 0o111) & !0o022);
 
-        match std::fs::set_permissions(path, perms) {
-            Err(err) => {
-                if err.kind() == std::io::ErrorKind::PermissionDenied && elevate_if_needed {
-                    info!("Elevated chmod {}", path.as_ref().to_string_lossy(),);
-                    match Command::new("sudo")
-                        .arg("chmod")
-                        .arg("a+x")
-                        .arg(path.as_ref().to_str().ok_or_else(|| {
-                            std::io::Error::new(
-                                err.kind(),
-                                "from path contains invalid characters!",
-                            )
-                        })?)
-                        .stdout(Stdio::inherit())
-                        .stderr(Stdio::inherit())
-                        .output()
-                    {
-                        Ok(_) => return Ok(()),
-                        Err(err) => {
-                            error!("{}", err);
-                        }
-                    };
-                }
-                error!("{}", &err);
-                return Err(err);
+        if let Err(err) = std::fs::set_permissions(path, perms) {
+            if err.kind() == std::io::ErrorKind::PermissionDenied && elevate_if_needed {
+                info!("Elevated chmod {}", path.as_ref().to_string_lossy(),);
+                match Command::new("sudo")
+                    .arg("chmod")
+                    .arg("a+x")
+                    .arg(path.as_ref().to_str().ok_or_else(|| {
+                        std::io::Error::new(err.kind(), "from path contains invalid characters!")
+                    })?)
+                    .stdout(Stdio::inherit())
+                    .stderr(Stdio::inherit())
+                    .output()
+                {
+                    Ok(_) => return Ok(()),
+                    Err(err) => {
+                        error!("{}", err);
+                    }
+                };
             }
-            Ok(_) => {}
+            error!("{}", &err);
+            return Err(err);
         }
     }
     Ok(())

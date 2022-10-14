@@ -56,7 +56,7 @@ fn cargo(args: &str, pwd: &str) -> Result<Dynamic, Box<EvalAltResult>> {
 }
 
 fn name2lib(name: &str) -> String {
-    let name = name.replace("-", "_");
+    let name = name.replace('-', "_");
     #[cfg(all(unix, not(target_os = "macos")))]
     {
         format!("lib{}.so", name)
@@ -73,6 +73,58 @@ fn name2lib(name: &str) -> String {
 
 fn name2lib_with_arch(name: &str) -> String {
     name2lib(&format!("{}.{}", name, arch_str()))
+}
+
+fn udev_add_rule(rule_name: String, rule: String) -> Result<(), Box<EvalAltResult>> {
+    #[cfg(target_os = "linux")]
+    {
+        info(
+            format!(
+                "Installing udev rule \"{}\": {}",
+                rule_name.as_str(),
+                rule.as_str()
+            )
+            .as_str(),
+        );
+
+        let mut rule_path = PathBuf::from(r"/etc/udev/rules.d");
+
+        if !rule_path.is_dir() {
+            return Err("unable to find udev rules directory".into());
+        }
+
+        let rule_file = format!("99-{}.rules", rule_name);
+        rule_path.push(rule_file);
+        let rule_path_str = rule_path.to_str().ok_or("invalid path generated")?;
+
+        Command::new("sudo")
+            .args(&[
+                "sh",
+                "-c",
+                &format!(
+                    "echo -e \"{}\" > {}",
+                    rule.replace('\"', "\\\""),
+                    rule_path_str
+                ),
+            ])
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .output()
+            .map_err(|_| "unable to write udev rule")?;
+
+        /*        {
+            let mut file = File::create(&rule_path).map_err(|_| "failed to create tarball file")?;
+            file.write_all(format!("{}\n", rule).as_bytes())
+                .map_err(|_| "failed to write the tarball")?;
+        }
+        */
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        info("skipping udev rule generation because udev is not available on your system");
+    }
+
+    Ok(())
 }
 
 macro_rules! cfg_arch {
@@ -157,35 +209,49 @@ impl<'a> ScriptCtx<'a> {
     }
 
     fn dkms_install(&mut self, path: String) -> Result<(), Box<EvalAltResult>> {
-        Command::new("sudo")
-            .args(&["dkms", "install", &path])
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .output().map_err(|_| "unable to execute DKMS add. DKMS is only available on *nix based systems (but not macOS)")?;
+        #[cfg(target_os = "linux")]
+        {
+            Command::new("sudo")
+                .args(&["dkms", "install", &path])
+                .stdout(Stdio::inherit())
+                .stderr(Stdio::inherit())
+                .output().map_err(|_| "unable to execute DKMS add. DKMS is only available on *nix based systems (but not macOS)")?;
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            info("skipping DKMS add. DKMS is only available on *nix based systems (but not macOS)");
+        }
 
         Ok(())
     }
 
     fn dkms_install_tarball(&mut self, bytes: Vec<u8>) -> Result<(), Box<EvalAltResult>> {
-        let mut path: PathBuf = self.tmp_dir.as_path().into();
-
-        let dir = format!("{:x}.tar.dz", CRC.checksum(self.sha.as_bytes()));
-
-        path.push(dir);
-
-        let path_str = path.to_str().ok_or("invalid path generated")?;
-
+        #[cfg(target_os = "linux")]
         {
-            let mut file = File::create(&path).map_err(|_| "failed to create tarball file")?;
-            file.write_all(&bytes)
-                .map_err(|_| "failed to write the tarball")?;
-        }
+            let mut path: PathBuf = self.tmp_dir.as_path().into();
 
-        Command::new("sudo")
-            .args(&["dkms", "install", &format!("--archive={}", path_str)])
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .output().map_err(|_| "unable to execute DKMS add. DKMS is only available on *nix based systems (but not macOS)")?;
+            let dir = format!("{:x}.tar.dz", CRC.checksum(self.sha.as_bytes()));
+
+            path.push(dir);
+
+            let path_str = path.to_str().ok_or("invalid path generated")?;
+
+            {
+                let mut file = File::create(&path).map_err(|_| "failed to create tarball file")?;
+                file.write_all(&bytes)
+                    .map_err(|_| "failed to write the tarball")?;
+            }
+
+            Command::new("sudo")
+                .args(&["dkms", "install", &format!("--archive={}", path_str)])
+                .stdout(Stdio::inherit())
+                .stderr(Stdio::inherit())
+                .output().map_err(|_| "unable to execute DKMS add. DKMS is only available on *nix based systems (but not macOS)")?;
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            info("skipping DKMS add. DKMS is only available on *nix based systems (but not macOS)");
+        }
 
         Ok(())
     }
@@ -229,7 +295,7 @@ impl<'a> ScriptCtx<'a> {
         // Mark that we did installation:
         *self.installed_release.try_borrow_mut().unwrap() = Some(self.entry_type());
 
-        let (stem, extension) = artifact.rsplit_once(".").ok_or("invalid artifact passed")?;
+        let (stem, extension) = artifact.rsplit_once('.').ok_or("invalid artifact passed")?;
 
         let out_filename = if self.opts.is_local {
             format!("{}.{}.{}", stem, arch_str(), extension)
@@ -323,7 +389,7 @@ pub fn execute_installer(
         )
     };
 
-    let tmp_dir = tmp_dir.as_deref().or_else(|| local_dir.as_ref()).unwrap();
+    let tmp_dir = tmp_dir.as_deref().or(local_dir.as_ref()).unwrap();
 
     let installed = RefCell::new(vec![]);
     let installed_release = RefCell::new(None);
@@ -411,7 +477,8 @@ pub fn execute_installer(
         .register_fn("error", error)
         .register_fn("name_to_lib", name2lib)
         .register_fn("name_to_lib_with_arch", name2lib_with_arch)
-        .register_fn("cargo", cargo);
+        .register_fn("cargo", cargo)
+        .register_fn("udev_add_rule", udev_add_rule);
 
     let mut scope = Scope::new();
     let ast = engine.compile_with_scope(&scope, script).unwrap();

@@ -68,7 +68,7 @@ fn main() -> Result<()> {
     }
 }
 
-fn add_package_opts<'a, 'b>(app: Command) -> Command {
+fn add_package_opts(app: Command) -> Command {
     app.arg(
         Arg::new("ignore-user-index")
             .long("ignore-user-index")
