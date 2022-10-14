@@ -1,11 +1,15 @@
-# memflow setup tool
+# memflowup - memflow setup tool
 
-This tool is meant to provide a really quick way to setup various memflow connectors, OS layers, utilities, and more.
+This tool is meant to provide a really quick way to setup various memflow components (connectors, OS plugins, utilities).
 
-Install through cargo:
-
+The recommended way is to install it through our automated script:
 ```sh
 curl --proto '=https' --tlsv1.2 -sSf https://sh.memflow.io | sh
+```
+
+Alternatively you can manually install it via cargo as well:
+```sh
+cargo install memflowup --force --version "=0.1.0-beta11"
 ```
 
 ## Usage
