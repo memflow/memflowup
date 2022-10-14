@@ -111,13 +111,6 @@ fn udev_add_rule(rule_name: String, rule: String) -> Result<(), Box<EvalAltResul
             .stderr(Stdio::inherit())
             .output()
             .map_err(|_| "unable to write udev rule")?;
-
-        /*        {
-            let mut file = File::create(&rule_path).map_err(|_| "failed to create tarball file")?;
-            file.write_all(format!("{}\n", rule).as_bytes())
-                .map_err(|_| "failed to write the tarball")?;
-        }
-        */
     }
     #[cfg(not(target_os = "linux"))]
     {
