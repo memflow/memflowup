@@ -11,7 +11,9 @@
 		"name": "memflow-win32",
 		"ty": "CorePlugin",
 		"repo_root_url": "https://github.com/memflow/memflow-win32",
-		"dev_binary_tag": "nightly",
+		"stable_binary_tag": "bin-stable",
+		"stable_branch": "stable",
+		"dev_binary_tag": "bin-main",
 		"dev_branch": "main"
 	},
 	{
@@ -19,7 +21,9 @@
 		"ty": "CorePlugin",
 		"platforms": ["linux", "windows"],
 		"repo_root_url": "https://github.com/memflow/memflow-native",
-		"dev_binary_tag": "nightly",
+		"stable_binary_tag": "bin-stable",
+		"stable_branch": "stable",
+		"dev_binary_tag": "bin-main",
 		"dev_branch": "main"
 	},
 	{
@@ -27,25 +31,27 @@
 		"ty": "CorePlugin",
 		"platforms": ["linux", "windows"],
 		"repo_root_url": "https://github.com/memflow/memflow-qemu",
-		"_stable_branch": "0.1.5",
-		"dev_binary_tag": "nightly",
+		"stable_binary_tag": "bin-stable",
+		"stable_branch": "stable",
+		"dev_binary_tag": "bin-main",
 		"dev_branch": "main"
 	},
 	{
 		"name": "memflow-coredump",
 		"ty": "CorePlugin",
 		"repo_root_url": "https://github.com/memflow/memflow-coredump",
-		"stable_branch": "0.1.4",
-		"dev_binary_tag": "nightly",
+		"stable_binary_tag": "bin-stable",
+		"stable_branch": "stable",
+		"dev_binary_tag": "bin-main",
 		"dev_branch": "main"
 	},
 	{
 		"name": "memflow-kcore",
 		"ty": "CorePlugin",
-		"platforms": ["linux"],
 		"repo_root_url": "https://github.com/memflow/memflow-kcore",
-		"_stable_branch": "master",
-		"dev_binary_tag": "nightly",
+		"stable_binary_tag": "bin-stable",
+		"stable_branch": "stable",
+		"dev_binary_tag": "bin-main",
 		"dev_branch": "main"
 	},
 	{
@@ -53,7 +59,9 @@
 		"ty": "CorePlugin",
 		"platforms": ["linux", "windows"],
 		"repo_root_url": "https://github.com/memflow/memflow-pcileech",
-		"_stable_branch": "0.1.7",
+		"stable_binary_tag": "bin-stable",
+		"stable_branch": "stable",
+		"dev_binary_tag": "bin-main",
 		"dev_branch": "main",
 		"install_script_path": "install.rhai"
 	},
@@ -62,7 +70,9 @@
 		"ty": "CorePlugin",
 		"platforms": ["linux"],
 		"repo_root_url": "https://github.com/memflow/memflow-kvm",
-		"_stable_branch": "v0.1.5",
+		"stable_binary_tag": "bin-stable",
+		"stable_branch": "stable",
+		"dev_binary_tag": "bin-main",
 		"dev_branch": "main",
 		"install_script_path": "install.rhai"
 	}

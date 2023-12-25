@@ -9,7 +9,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.memflow.io | sh
 
 Alternatively you can manually install it via cargo as well:
 ```sh
-cargo install memflowup --force --version "=0.1.0-beta11"
+cargo install memflowup --force
 ```
 
 ## Usage
@@ -32,7 +32,7 @@ Install a set of connectors non-interactively:
 memflowup install memflow-qemu-procfs memflow-coredump
 ```
 
-Same with development (0.2) channel:
+Same with development (0.2+) channel:
 
 ```sh
 memflowup install -d memflow-qemu memflow-coredump

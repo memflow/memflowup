@@ -132,7 +132,7 @@ fn install_modules(load_opts: PackageLoadOpts, from_source: bool) -> Result<()> 
     let branch = util::user_input(
         "which channel do you want to use?",
         &["stable", "development"],
-        1,
+        0,
     )
     .map(|r| r != 0)
     .map(<_>::into)?;
