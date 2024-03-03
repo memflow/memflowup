@@ -20,8 +20,10 @@ pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 fn main() -> Result<()> {
     let matches = parse_args();
 
-    // check for update after we 
-    check_for_update().ok();
+    // check for update after we parsed the args
+    if !matches.get_flag("skip-version-check") {
+        check_for_update().ok();
+    }
 
     // set log level
     let log_level = match matches.get_count("verbose") {
@@ -92,7 +94,7 @@ fn check_for_update() -> Result<()> {
             let ans = Confirm::new("Do you want to continue without updating?")
                 .with_default(false)
                 .with_help_message(
-                    "Some features might not work properly with a different version.",
+                    "Some features might not work properly with an outdated version.",
                 )
                 .prompt();
 
@@ -131,6 +133,11 @@ fn parse_args() -> ArgMatches {
         .version(crate_version!())
         .author(crate_authors!())
         .arg(Arg::new("verbose").short('v').action(ArgAction::Count))
+        .arg(
+            Arg::new("skip-version-check")
+                .long("skip-version-check")
+                .action(ArgAction::SetTrue),
+        )
         .subcommand(
             add_package_opts(
                 Command::new("install")
