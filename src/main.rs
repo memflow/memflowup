@@ -7,7 +7,11 @@ mod scripting;
 mod setup_mode;
 mod util;
 
+use std::{process::exit, time::Duration};
+
 use clap::*;
+use crates_io_api::{Error, SyncClient};
+use inquire::Confirm;
 use log::Level;
 use package::PackageLoadOpts;
 
@@ -15,6 +19,9 @@ pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 fn main() -> Result<()> {
     let matches = parse_args();
+
+    // check for update after we 
+    check_for_update().ok();
 
     // set log level
     let log_level = match matches.get_count("verbose") {
@@ -68,6 +75,37 @@ fn main() -> Result<()> {
     }
 }
 
+fn check_for_update() -> Result<()> {
+    let client = SyncClient::new("memflowup", Duration::from_millis(1000))?;
+    let memflowup = client.get_crate(crate_name!())?;
+
+    // find latest non-yanked version
+    if let Some(latest_version) = memflowup.versions.iter().find(|v| !v.yanked) {
+        if latest_version.num != crate_version!() {
+            println!("An update for memflowup is available.");
+            println!();
+            println!("To install the new version run:");
+            println!("$ cargo install memflowup --force");
+            println!();
+            println!("More information about installing memflowup can be found at https://memflow.io/quick_start/");
+
+            let ans = Confirm::new("Do you want to continue without updating?")
+                .with_default(false)
+                .with_help_message(
+                    "Some features might not work properly with a different version.",
+                )
+                .prompt();
+
+            match ans {
+                Ok(false) | Err(_) => exit(0),
+                _ => (),
+            }
+        }
+    }
+
+    Ok(())
+}
+
 fn add_package_opts(app: Command) -> Command {
     app.arg(
         Arg::new("ignore-user-index")
@@ -89,6 +127,7 @@ fn add_package_opts(app: Command) -> Command {
 fn parse_args() -> ArgMatches {
     Command::new("memflowup")
         .arg_required_else_help(true)
+        .subcommand_required(true)
         .version(crate_version!())
         .author(crate_authors!())
         .arg(Arg::new("verbose").short('v').action(ArgAction::Count))
