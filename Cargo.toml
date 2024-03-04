@@ -32,3 +32,6 @@ crc = "^3.0"
 
 # update check
 crates_io_api = { version = "0.9.0", default-features = false, features = ["rustls"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"

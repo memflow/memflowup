@@ -166,7 +166,7 @@ pub fn create_dir_with_elevation(path: impl AsRef<Path>, elevate: bool) -> crate
                     .ok_or("directory contains invalid characters!")?;
                 info!("Elevated mkdir {}", path_str);
                 match Command::new("sudo")
-                    .args(&["mkdir", "-p", path_str])
+                    .args(["mkdir", "-p", path_str])
                     .stdout(Stdio::inherit())
                     .stderr(Stdio::inherit())
                     .output()
@@ -394,7 +394,7 @@ pub fn make_temp_dir(subdir: &str, names: &[&str]) -> Result<TempDir, std::io::E
         digest.update(n.as_bytes());
     }
 
-    let tmp_path = tmp_dir.join(&format!("{}/{}", subdir, digest.finalize()));
+    let tmp_path = tmp_dir.join(format!("{}/{}", subdir, digest.finalize()));
     std::fs::create_dir_all(&tmp_path)?;
 
     Ok(TempDir(tmp_path))

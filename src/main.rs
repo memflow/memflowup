@@ -10,7 +10,7 @@ mod util;
 use std::{process::exit, time::Duration};
 
 use clap::*;
-use crates_io_api::{Error, SyncClient};
+use crates_io_api::SyncClient;
 use inquire::Confirm;
 use log::Level;
 use package::PackageLoadOpts;
@@ -20,9 +20,15 @@ pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 fn main() -> Result<()> {
     let matches = parse_args();
 
+    // check if we run as root
+    check_root()?;
+
     // check for update after we parsed the args
     if !matches.get_flag("skip-version-check") {
+        #[cfg(not(debug_assertions))]
         check_for_update().ok();
+        #[cfg(debug_assertions)]
+        println!("Skipping update check in debug mode.");
     }
 
     // set log level
@@ -105,6 +111,34 @@ fn check_for_update() -> Result<()> {
         }
     }
 
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn check_root() -> Result<()> {
+    let is_root = unsafe { libc::getuid() } == 0;
+    if is_root {
+        println!("memflowup has been started as the root user or via sudo.");
+        println!();
+        println!("By default everything should be installed under your local user home directory and not the home directory of the root user.");
+        println!("If you want to continue installing components as the root user they will be placed in /root/.local/lib/memflow instead of $HOME/.local/lib/memflow.");
+        println!("This might cause issues in case you do not run your memflow program via root/sudo as well.");
+
+        let ans = Confirm::new("Do you want to continue running memflowup as root?")
+            .with_default(false)
+            .with_help_message("Some things might not work as intended.")
+            .prompt();
+
+        match ans {
+            Ok(false) | Err(_) => exit(0),
+            _ => (),
+        }
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn check_root() -> Result<()> {
     Ok(())
 }
 

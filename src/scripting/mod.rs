@@ -98,7 +98,7 @@ fn udev_add_rule(rule_name: String, rule: String) -> Result<(), Box<EvalAltResul
         let rule_path_str = rule_path.to_str().ok_or("invalid path generated")?;
 
         Command::new("sudo")
-            .args(&[
+            .args([
                 "sh",
                 "-c",
                 &format!(
@@ -173,7 +173,7 @@ impl<'a> ScriptCtx<'a> {
         let path_str = path.to_str().ok_or("invalid path generated")?;
 
         Command::new("git")
-            .args(&[
+            .args([
                 "clone",
                 "--single-branch",
                 "--recursive",
@@ -201,23 +201,6 @@ impl<'a> ScriptCtx<'a> {
         .map_err(<_>::into)
     }
 
-    fn dkms_install(&mut self, path: String) -> Result<(), Box<EvalAltResult>> {
-        #[cfg(target_os = "linux")]
-        {
-            Command::new("sudo")
-                .args(&["dkms", "install", &path])
-                .stdout(Stdio::inherit())
-                .stderr(Stdio::inherit())
-                .output().map_err(|_| "unable to execute DKMS add. DKMS is only available on *nix based systems (but not macOS)")?;
-        }
-        #[cfg(not(target_os = "linux"))]
-        {
-            info("skipping DKMS add. DKMS is only available on *nix based systems (but not macOS)");
-        }
-
-        Ok(())
-    }
-
     fn dkms_install_tarball(&mut self, bytes: Vec<u8>) -> Result<(), Box<EvalAltResult>> {
         #[cfg(target_os = "linux")]
         {
@@ -236,7 +219,7 @@ impl<'a> ScriptCtx<'a> {
             }
 
             Command::new("sudo")
-                .args(&["dkms", "install", &format!("--archive={}", path_str)])
+                .args(["dkms", "install", &format!("--archive={}", path_str)])
                 .stdout(Stdio::inherit())
                 .stderr(Stdio::inherit())
                 .output().map_err(|_| "unable to execute DKMS add. DKMS is only available on *nix based systems (but not macOS)")?;
@@ -304,7 +287,7 @@ impl<'a> ScriptCtx<'a> {
 
             out_path.to_str().ok_or("invalid output path")?;
 
-            util::create_dir_with_elevation(&out_dir.as_path(), self.opts.system_wide)
+            util::create_dir_with_elevation(out_dir.as_path(), self.opts.system_wide)
                 .map_err(|_| format!("unable to create plugin target directory: {:?}", out_dir))?;
 
             util::write_with_elevation(&out_path, true, |mut f| {
@@ -435,7 +418,7 @@ pub fn execute_installer(
         } else {
             Some({
                 let mut path_buf = tmp_dir.clone();
-                path_buf.push(&path);
+                path_buf.push(path);
                 std::fs::read_to_string(path_buf)?
             })
         }
@@ -464,8 +447,7 @@ pub fn execute_installer(
             "github_release_artifact",
             ScriptCtx::github_release_artifact,
         )
-        .register_fn("dkms_install", ScriptCtx::dkms_install)
-        .register_fn("dkms_install", ScriptCtx::dkms_install_tarball)
+        .register_fn("dkms_install_tarball", ScriptCtx::dkms_install_tarball)
         .register_fn("info", info)
         .register_fn("error", error)
         .register_fn("name_to_lib", name2lib)
