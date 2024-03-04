@@ -83,6 +83,7 @@ fn main() -> Result<()> {
     }
 }
 
+#[allow(unused)]
 fn check_for_update() -> Result<()> {
     let client = SyncClient::new("memflowup", Duration::from_millis(1000))?;
     let memflowup = client.get_crate(crate_name!())?;

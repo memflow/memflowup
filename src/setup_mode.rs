@@ -1,3 +1,4 @@
+use crate::database::Branch;
 use crate::package;
 use crate::util;
 
@@ -6,6 +7,9 @@ use std::ffi::OsStr;
 use std::fs;
 use std::process::{Command, Stdio};
 
+use inquire::Confirm;
+use inquire::MultiSelect;
+use inquire::Select;
 use log::{info, warn};
 
 use crate::package::*;
@@ -13,8 +17,17 @@ use crate::package::*;
 use crate::Result;
 
 pub fn setup_mode(load_opts: PackageLoadOpts) -> Result<()> {
-    let source_install =
-        util::user_input_boolean("do you want to build packages from source?", false)?;
+    let binary_install = {
+        let ans = Confirm::new("Do you want to install binary packages?")
+            .with_default(true)
+            .with_help_message(
+                "Some components require additional third-party libraries to be built from source.",
+            )
+            .prompt();
+
+        matches!(ans, Ok(true) | Err(_))
+    };
+    let source_install = !binary_install;
 
     if source_install {
         // 1. ensure rustup / cargo is installed in PATH
@@ -31,19 +44,32 @@ fn ensure_rust() -> Result<()> {
     match which::which("cargo") {
         Ok(cargo_dir) => {
             info!("cargo found at {:?}", cargo_dir);
+            // TODO: check rust version
             Ok(())
         }
         Err(_) => {
             warn!("cargo not found");
-            if !cfg!(windows)
-                && util::user_input_boolean(
-                    "do you want memflowup to install rust via rustup?",
-                    true,
-                )?
-            {
-                info!("cargo not found, installing via rustup");
-                install_rust()
+            if !cfg!(windows) {
+                let install_rustup = {
+                    let ans = Confirm::new("Do you want to install rust via rustup now?")
+                        .with_default(true)
+                        .with_help_message(
+                            "Some components require additional third-party libraries to be built from source.",
+                        )
+                        .prompt();
+
+                    matches!(ans, Ok(true) | Err(_))
+                };
+
+                if install_rustup {
+                    info!("cargo not found, installing via rustup");
+                    install_rust()
+                } else {
+                    println!("rust/cargo not found. please install it manually.");
+                    Err("rust/cargo not found. please install it manually.".into())
+                }
             } else {
+                println!("rust/cargo not found. please install it manually.");
                 Err("rust/cargo not found. please install it manually.".into())
             }
         }
@@ -118,10 +144,17 @@ fn install_rustup() -> Result<()> {
 fn install_modules(load_opts: PackageLoadOpts, from_source: bool) -> Result<()> {
     println!("Running in interactive mode. You can always re-run memflowup to install additional packages, or to different paths.");
 
-    let system_wide = util::user_input_boolean(
-        "do you want to install the initial packages system-wide?",
-        true,
-    )?;
+    let user_only = {
+        let ans = Confirm::new("Do you want to install packages for the current-user only?")
+            .with_default(true)
+            .with_help_message(
+                "Installing packages for the current user will place them in ~/.local/lib/memflow/",
+            )
+            .prompt();
+
+        matches!(ans, Ok(true) | Err(_))
+    };
+    let system_wide = !user_only;
 
     if !load_opts.ignore_upstream {
         update_index(system_wide)?;
@@ -129,13 +162,16 @@ fn install_modules(load_opts: PackageLoadOpts, from_source: bool) -> Result<()> 
 
     let packages = load_packages(system_wide, load_opts)?;
 
-    let branch = util::user_input(
-        "which channel do you want to use?",
-        &["stable", "development"],
-        0,
-    )
-    .map(|r| r != 0)
-    .map(<_>::into)?;
+    let branch = {
+        let options = vec!["stable", "experimental"];
+        let ans = Select::new("Which channel do you want to use?", options).prompt();
+
+        match ans {
+            Ok("stable") | Err(_) => Branch::Stable,
+            Ok("experimental") => Branch::Dev,
+            _ => Branch::Stable,
+        }
+    };
 
     package::list(system_wide, branch, from_source, load_opts)?;
 

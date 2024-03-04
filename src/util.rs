@@ -1,6 +1,6 @@
 use std::env;
 use std::fs::{self, File};
-use std::io::{self, Read, Write};
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -16,54 +16,6 @@ use zip::ZipArchive;
 use crc::{Crc, CRC_64_GO_ISO};
 
 const CRC: Crc<u64> = Crc::<u64>::new(&CRC_64_GO_ISO);
-
-pub fn user_input_boolean(question: &str, default: bool) -> crate::Result<bool> {
-    user_input(question, &["y", "n"], !default as usize).map(|r| r == 0)
-}
-
-pub fn user_input(question: &str, options: &[&str], default: usize) -> crate::Result<usize> {
-    loop {
-        print!("{}", question);
-
-        print!(" [");
-
-        for (i, option) in options.iter().enumerate() {
-            if i != 0 {
-                print!("/");
-            }
-
-            if i == default {
-                print!("{}", option.to_uppercase());
-            } else {
-                print!("{}", option);
-            }
-        }
-
-        print!("]: ");
-
-        io::stdout().flush().ok();
-
-        let mut input = String::new();
-        io::stdin()
-            .read_line(&mut input)
-            .expect("Failed to read from stdin");
-        let input_stripped = input.trim().to_lowercase();
-
-        if input_stripped.is_empty() {
-            return Ok(default);
-        } else {
-            let mut iter = options
-                .iter()
-                .enumerate()
-                .filter(|(_, o)| o.to_lowercase().starts_with(&input_stripped));
-
-            // Return only if there's just a single starts_with match
-            if let (Some((i, _)), None) = (iter.next(), iter.next()) {
-                return Ok(i);
-            }
-        }
-    }
-}
 
 /// Returns the path to a temporary file with the given name
 #[allow(unused)]
