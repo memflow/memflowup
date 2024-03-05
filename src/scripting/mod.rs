@@ -201,6 +201,23 @@ impl<'a> ScriptCtx<'a> {
         .map_err(<_>::into)
     }
 
+    fn dkms_install(&mut self, path: String) -> Result<(), Box<EvalAltResult>> {
+        #[cfg(target_os = "linux")]
+        {
+            Command::new("sudo")
+                .args(&["dkms", "install", &path])
+                .stdout(Stdio::inherit())
+                .stderr(Stdio::inherit())
+                .output().map_err(|_| "unable to execute DKMS add. DKMS is only available on *nix based systems (but not macOS)")?;
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            info("skipping DKMS add. DKMS is only available on *nix based systems (but not macOS)");
+        }
+
+        Ok(())
+    }
+
     fn dkms_install_tarball(&mut self, bytes: Vec<u8>) -> Result<(), Box<EvalAltResult>> {
         #[cfg(target_os = "linux")]
         {
@@ -447,7 +464,8 @@ pub fn execute_installer(
             "github_release_artifact",
             ScriptCtx::github_release_artifact,
         )
-        .register_fn("dkms_install_tarball", ScriptCtx::dkms_install_tarball)
+        .register_fn("dkms_install", ScriptCtx::dkms_install)
+        .register_fn("dkms_install", ScriptCtx::dkms_install_tarball)
         .register_fn("info", info)
         .register_fn("error", error)
         .register_fn("name_to_lib", name2lib)
