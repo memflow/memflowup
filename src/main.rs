@@ -1,23 +1,27 @@
 mod build_mode;
 mod database;
+mod error;
 mod github_api;
 mod oneshot;
 mod package;
+mod registry;
 mod scripting;
 mod setup_mode;
 mod util;
 
-use std::{process::exit, time::Duration};
+use std::{future::IntoFuture, process::exit, time::Duration};
 
 use clap::*;
 use crates_io_api::SyncClient;
 use inquire::Confirm;
 use log::Level;
 use package::PackageLoadOpts;
+use registry::RegistryClient;
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     let matches = parse_args();
 
     // check if we run as root
@@ -30,6 +34,8 @@ fn main() -> Result<()> {
         #[cfg(debug_assertions)]
         println!("Skipping update check in debug mode.");
     }
+
+    // TODO: rust env logger, all relevant output via print
 
     // set log level
     let log_level = match matches.get_count("verbose") {
@@ -49,6 +55,38 @@ fn main() -> Result<()> {
     .unwrap();
 
     match matches.subcommand() {
+        Some(("push", matches)) => {
+            // push libmemflow_coredump.aarch64.so
+            unimplemented!()
+        }
+        Some(("pull", matches)) => {
+            // pull coredump:latest
+            unimplemented!()
+        }
+        Some(("plugins", matches)) => {
+            // TODO: list local + remote plugins
+            // TODO: allow changing registry
+            match matches.subcommand() {
+                Some(("ls", _)) => {
+                    let client = RegistryClient::new("https://registry.memflow.io");
+                    let plugins = client.plugins().await?;
+
+                    println!(
+                        "{0: <16} {1}",
+                        "NAME", "DESCRIPTION"
+                    );
+                    for plugin in plugins.iter() {
+                        println!("{0: <16} {1: <10}", plugin.name, plugin.description);
+                    }
+                    //println!("{0: <16} {1: <10}", "TOTAL", plugins.len());
+                    Ok(())
+                }
+                _ => {
+                    todo!()
+                }
+            }
+        }
+
         Some(("build", matches)) => build_mode::build(
             matches.get_one::<String>("name").unwrap(),
             matches.get_one::<String>("path").unwrap(),
@@ -172,6 +210,11 @@ fn parse_args() -> ArgMatches {
             Arg::new("skip-version-check")
                 .long("skip-version-check")
                 .action(ArgAction::SetTrue),
+        )
+        .subcommand(
+            Command::new("plugins")
+                .subcommand_required(true)
+                .subcommands([Command::new("ls")]),
         )
         .subcommand(
             add_package_opts(

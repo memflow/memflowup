@@ -33,5 +33,11 @@ crc = "^3.0"
 # update check
 crates_io_api = { version = "0.9.0", default-features = false, features = ["rustls"] }
 
+# memflow-registry
+reqwest = { version = "0.12", features = ["json"] }
+chrono = { version = "0.4", features = ["serde"] }
+tokio = { version = "1", features = ["full"] }
+thiserror = "1.0" # TODO: move up
+
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "0.2"
