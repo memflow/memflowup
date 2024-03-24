@@ -2,7 +2,7 @@ use serde::*;
 
 use crate::{
     database::{self, load_database, DatabaseEntry, EntryType},
-    scripting, util, Result,
+    util, Result,
 };
 use database::Branch;
 
@@ -74,15 +74,19 @@ impl Package {
         }
     }
 
+    #[deprecated]
     fn install_inner(&self, branch: Branch, entrypoint: &str, opts: &PackageOpts) -> Result<()> {
-        let (ty, artifacts) = scripting::execute_installer(self, opts, branch, entrypoint)?;
+        // TODO: fixme
 
-        database::commit_entry(
-            &self.name,
-            database::DatabaseEntry { ty, artifacts },
-            branch,
-            opts.system_wide,
-        )
+        // let (ty, artifacts) = scripting::execute_installer(self, opts, branch, entrypoint)?;
+
+        // database::commit_entry(
+        //     &self.name,
+        //     database::DatabaseEntry { ty, artifacts },
+        //     branch,
+        //     opts.system_wide,
+        // )
+        Ok(())
     }
 
     pub fn install_local(&self, opts: &PackageOpts) -> Result<()> {
@@ -195,6 +199,7 @@ impl PackageType {
     }
 }
 
+#[deprecated]
 pub fn update_index(system_wide: bool) -> Result<()> {
     let mut path = util::config_dir(system_wide);
     path.push("index");
@@ -224,6 +229,8 @@ pub fn update_index(system_wide: bool) -> Result<()> {
             util::write_with_elevation(path, system_wide, |mut file| {
                 file.write_all(&bytes).map_err(Into::into)
             })
+            .unwrap(); // TODO: fix me
+            Ok(())
         }
         Err(e) => {
             error!("Failed to download index: {}", e);

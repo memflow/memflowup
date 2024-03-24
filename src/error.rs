@@ -7,6 +7,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(thiserror::Error, Debug, Clone, PartialEq)]
 pub enum Error {
     // Basic errors
+    #[error("Unknown error: {0}")]
+    Unknown(String),
     #[error("IO error: {0}")]
     IO(String),
     #[error("Parse error: {0}")]
@@ -23,6 +25,12 @@ pub enum Error {
     Http(String),
     #[error("Signature error: {0}")]
     Signature(String),
+}
+
+impl From<&str> for Error {
+    fn from(err: &str) -> Self {
+        Error::Unknown(err.to_owned())
+    }
 }
 
 impl From<std::convert::Infallible> for Error {
@@ -63,6 +71,18 @@ impl From<serde_json::error::Error> for Error {
 
 impl From<reqwest::Error> for Error {
     fn from(err: reqwest::Error) -> Self {
+        Error::Http(err.to_string())
+    }
+}
+
+impl From<reqwest::header::InvalidHeaderValue> for Error {
+    fn from(err: reqwest::header::InvalidHeaderValue) -> Self {
+        Error::Http(err.to_string())
+    }
+}
+
+impl From<crates_io_api::Error> for Error {
+    fn from(err: crates_io_api::Error) -> Self {
         Error::Http(err.to_string())
     }
 }

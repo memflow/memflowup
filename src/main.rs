@@ -1,14 +1,16 @@
 mod build_mode;
+mod commands;
 mod database;
 mod error;
 mod github_api;
 mod oneshot;
 mod package;
 mod registry;
-mod scripting;
 mod setup_mode;
 mod util;
 
+use indicatif::{ProgressBar, ProgressStyle};
+use log::warn;
 use std::{future::IntoFuture, process::exit, time::Duration};
 
 use clap::*;
@@ -17,9 +19,9 @@ use inquire::Confirm;
 use log::Level;
 use package::PackageLoadOpts;
 
-use registry::MEMFLOW_REGISTRY;
-
-pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+use error::{Error, Result};
+use futures_util::stream::StreamExt;
+use registry::{PluginUri, MEMFLOW_REGISTRY};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -56,40 +58,16 @@ async fn main() -> Result<()> {
     .unwrap();
 
     match matches.subcommand() {
+        // memflowup 0.2
         Some(("push", matches)) => {
             // push libmemflow_coredump.aarch64.so
             // TODO: sign + token
             unimplemented!()
         }
-        Some(("pull", matches)) => {
-            // pull coredump:latest
-            // support custom registries:
-            // registry.memflow.io/coredump:latest
-            let plugin_name = matches.get_one::<String>("plugin_name").unwrap();
-            let plugins = registry::download(&plugin_name).await?;
+        Some(("pull", matches)) => commands::pull::handle(matches).await,
+        Some(("plugins", matches)) => commands::plugins::handle(matches).await,
 
-            Ok(())
-        }
-        Some(("plugins", matches)) => {
-            // TODO: list local + remote plugins
-            // TODO: allow changing registry
-            match matches.subcommand() {
-                Some(("ls", _)) => {
-                    let plugins = registry::plugins(None).await?;
-
-                    println!("{0: <16} {1}", "NAME", "DESCRIPTION");
-                    for plugin in plugins.iter() {
-                        println!("{0: <16} {1: <10}", plugin.name, plugin.description);
-                    }
-                    //println!("{0: <16} {1: <10}", "TOTAL", plugins.len());
-                    Ok(())
-                }
-                _ => {
-                    unreachable!()
-                }
-            }
-        }
-
+        // memflowup 0.1
         Some(("build", matches)) => build_mode::build(
             matches.get_one::<String>("name").unwrap(),
             matches.get_one::<String>("path").unwrap(),
@@ -126,7 +104,8 @@ async fn main() -> Result<()> {
 
 #[allow(unused)]
 fn check_for_update() -> Result<()> {
-    let client = SyncClient::new("memflowup", Duration::from_millis(1000))?;
+    let client = SyncClient::new("memflowup", Duration::from_millis(1000))
+        .map_err(|err| Error::Http(err.to_string()))?;
     let memflowup = client.get_crate(crate_name!())?;
 
     // find latest non-yanked version
@@ -214,15 +193,7 @@ fn parse_args() -> ArgMatches {
                 .long("skip-version-check")
                 .action(ArgAction::SetTrue),
         )
-        .subcommands([
-            Command::new("push"),
-            Command::new("pull").args([Arg::new("plugin_name")
-                .required(true)
-                .action(ArgAction::Set)]),
-            Command::new("plugins")
-                .subcommand_required(true)
-                .subcommands([Command::new("ls")]),
-        ])
+        .subcommands(commands::metadata())
         .subcommand(
             add_package_opts(
                 Command::new("install")

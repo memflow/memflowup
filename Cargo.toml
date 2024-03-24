@@ -30,14 +30,22 @@ dirs = "^4.0"
 zip = "^0.6"
 crc = "^3.0"
 
+# memflowup 0.2
+thiserror = "1.0"
+console = "0.15"
+
 # update check
 crates_io_api = { version = "0.9.0", default-features = false, features = ["rustls"] }
 
 # memflow-registry
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "0.12", features = ["json", "stream"] }
 chrono = { version = "0.4", features = ["serde"] }
 tokio = { version = "1", features = ["full"] }
-thiserror = "1.0" # TODO: move up
+sha256 = "1.5"
+
+# download progress
+futures-util = "0.3"
+indicatif = "0.17"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "0.2"

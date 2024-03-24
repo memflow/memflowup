@@ -1,3 +1,4 @@
+use crate::error::Error;
 use crate::package::*;
 
 use crate::Result;
@@ -16,7 +17,7 @@ pub fn build(
         "utility" | "util" => PackageType::Utility,
         "library" | "lib" => PackageType::Library,
         "daemon_plugin" | "daemon" => PackageType::DaemonPlugin,
-        _ => return Err("Invalid type".into()),
+        _ => return Err(Error::NotImplemented("Invalid type".into())),
     };
 
     let package = Package {

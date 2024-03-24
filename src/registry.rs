@@ -1,7 +1,7 @@
-use std::str::FromStr;
+use std::{fmt::Display, str::FromStr};
 
 use chrono::NaiveDateTime;
-use reqwest::{IntoUrl, Url};
+use reqwest::{IntoUrl, Response, Url};
 use serde::Deserialize;
 
 use crate::error::{Error, Result};
@@ -74,56 +74,90 @@ pub async fn plugins(registry: Option<&str>) -> Result<Vec<PluginName>> {
     Ok(response.plugins)
 }
 
-// Retrieves a list of all plugin versions
-pub async fn download(plugin_name: &str) -> Result<()> {
-    // TODO: unit tests
-    let plugin: PluginUri = plugin_name.parse()?;
-    println!("registry {}", plugin.registry());
-    println!("name {}", plugin.name());
-    println!("version {}", plugin.version());
+pub async fn plugin_versions(
+    registry: Option<&str>,
+    plugin_name: &str,
+) -> Result<Vec<PluginEntry>> {
+    // construct query path
+    let mut path: Url = registry.unwrap_or(MEMFLOW_REGISTRY).parse().unwrap();
+    path.set_path(&format!("plugins/{}", plugin_name));
 
-    let mut path: Url = plugin.registry().parse().unwrap();
-    path.set_path(&format!("plugins/{}", plugin.name()));
-
-    // setup filters
+    // setup filtering based on the os memflowup is built for
     {
         let mut query = path.query_pairs_mut();
-        if plugin.version() != "latest" {
-            query.append_pair("version", plugin.version());
-        }
         query.append_pair("memflow_plugin_version", "1"); // TODO:
-
-        // file_type
-        #[cfg(target_os = "windows")]
-        query.append_pair("file_type", "pe");
-        #[cfg(target_os = "linux")]
-        query.append_pair("file_type", "elf");
-        #[cfg(target_os = "macos")]
-        query.append_pair("file_type", "mach");
-
-        #[cfg(target_arch = "x86_64")]
-        query.append_pair("architecture", "x86_64");
-        #[cfg(target_arch = "x86")]
-        query.append_pair("architecture", "x86");
-        #[cfg(target_arch = "aarch64")]
-        query.append_pair("architecture", "arm64");
-        #[cfg(target_arch = "arm")]
-        query.append_pair("architecture", "arm");
-
-        // limit to the latest entry
-        query.append_pair("limit", "1");
     }
+    append_os_arch_filter(&mut path);
 
     let response = reqwest::get(path)
         .await?
         .json::<PluginsFindResponse>()
         .await?;
 
-    println!("response: {:?}", response);
+    Ok(response.plugins)
+}
 
-    // TODO: download
+// Downloads a plugin based on the specified uri
+pub async fn find_by_uri(plugin_uri: &PluginUri) -> Result<PluginEntry> {
+    // construct query path
+    let mut path: Url = plugin_uri.registry().parse().unwrap();
+    path.set_path(&format!("plugins/{}", plugin_uri.name()));
 
-    Ok(())
+    // setup filtering based on the os memflowup is built for
+    {
+        let mut query = path.query_pairs_mut();
+        if plugin_uri.version() != "latest" {
+            query.append_pair("version", plugin_uri.version());
+        }
+        query.append_pair("memflow_plugin_version", "1"); // TODO:
+                                                          // limit to the latest entry
+        query.append_pair("limit", "1");
+    }
+    append_os_arch_filter(&mut path);
+
+    let response = reqwest::get(path)
+        .await?
+        .json::<PluginsFindResponse>()
+        .await?;
+
+    if let Some(variant) = response.plugins.first() {
+        Ok(variant.to_owned())
+    } else {
+        Err(Error::NotFound(format!(
+            "plugin `{}` not found",
+            plugin_uri
+        )))
+    }
+}
+
+pub async fn download(plugin_uri: &PluginUri, variant: &PluginEntry) -> Result<Response> {
+    let mut path: Url = plugin_uri.registry().parse().unwrap();
+    path.set_path(&format!("files/{}", variant.digest));
+
+    let response = reqwest::get(path).await?;
+    Ok(response)
+}
+
+fn append_os_arch_filter(path: &mut Url) {
+    let mut query = path.query_pairs_mut();
+
+    // file_type
+    #[cfg(target_os = "windows")]
+    query.append_pair("file_type", "pe");
+    #[cfg(target_os = "linux")]
+    query.append_pair("file_type", "elf");
+    #[cfg(target_os = "macos")]
+    query.append_pair("file_type", "mach");
+
+    // architecture
+    #[cfg(target_arch = "x86_64")]
+    query.append_pair("architecture", "x86_64");
+    #[cfg(target_arch = "x86")]
+    query.append_pair("architecture", "x86");
+    #[cfg(target_arch = "aarch64")]
+    query.append_pair("architecture", "arm64");
+    #[cfg(target_arch = "arm")]
+    query.append_pair("architecture", "arm");
 }
 
 /// Parses a plugin string into it's path components
@@ -134,7 +168,7 @@ pub async fn download(plugin_name: &str) -> Result<()> {
 /// `coredump:latest` - will also pull latest
 /// `coredump:0.2.0` - will pull the newest binary with this specific version
 /// `memflow.registry.io/coredump` - pulls from another registry
-struct PluginUri {
+pub struct PluginUri {
     registry: Option<String>,
     name: String,
     version: Option<String>,
@@ -183,6 +217,19 @@ impl FromStr for PluginUri {
             name: version[0].to_owned(),
             version: version.get(1).map(|&s| s.to_owned()),
         })
+    }
+}
+
+impl Display for PluginUri {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        if let Some(registry) = &self.registry {
+            write!(f, "{}/", registry)?;
+        }
+        write!(f, "{}", self.name)?;
+        if let Some(version) = &self.version {
+            write!(f, ":{}", version)?;
+        }
+        Ok(())
     }
 }
 
