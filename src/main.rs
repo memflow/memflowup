@@ -65,7 +65,7 @@ async fn main() -> Result<()> {
             unimplemented!()
         }
         Some(("pull", matches)) => commands::pull::handle(matches).await,
-        Some(("plugins", matches)) => commands::plugins::handle(matches).await,
+        Some(("registry", matches)) => commands::registry::handle(matches).await,
 
         // memflowup 0.1
         Some(("build", matches)) => build_mode::build(

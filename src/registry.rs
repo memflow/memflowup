@@ -77,6 +77,7 @@ pub async fn plugins(registry: Option<&str>) -> Result<Vec<PluginName>> {
 pub async fn plugin_versions(
     registry: Option<&str>,
     plugin_name: &str,
+    limit: usize,
 ) -> Result<Vec<PluginEntry>> {
     // construct query path
     let mut path: Url = registry.unwrap_or(MEMFLOW_REGISTRY).parse().unwrap();
@@ -86,6 +87,7 @@ pub async fn plugin_versions(
     {
         let mut query = path.query_pairs_mut();
         query.append_pair("memflow_plugin_version", "1"); // TODO:
+        query.append_pair("limit", &limit.to_string());
     }
     append_os_arch_filter(&mut path);
 
@@ -176,8 +178,11 @@ pub struct PluginUri {
 
 impl PluginUri {
     #[inline]
-    pub fn registry(&self) -> &str {
-        self.registry.as_deref().unwrap_or(MEMFLOW_REGISTRY)
+    pub fn registry(&self) -> String {
+        self.registry
+            .as_ref()
+            .map(|r| format!("https://{}", r))
+            .unwrap_or_else(|| MEMFLOW_REGISTRY.to_owned())
     }
 
     #[inline]

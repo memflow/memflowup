@@ -94,7 +94,7 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
     // TODO: - after signature verification copy plugin to final destination
 
     println!(
-        "{} Successfully downloaded plugin to: {:?}",
+        "{} Downloaded plugin to: {:?}",
         console::style("[=]").bold().dim(),
         file_name.as_os_str(),
     );
@@ -103,7 +103,13 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
     // TODO: this does not contain all plugins in this file - allow querying that from memflow-registry as well
     let mut file_name = file_name.clone();
     file_name.set_extension("meta");
-    tokio::fs::write(file_name, serde_json::to_string_pretty(&variant)?).await?;
+    tokio::fs::write(&file_name, serde_json::to_string_pretty(&variant)?).await?;
+
+    println!(
+        "{} Wrote plugin metadata to: {:?}",
+        console::style("[=]").bold().dim(),
+        file_name.as_os_str(),
+    );
 
     Ok(())
 }
@@ -124,6 +130,10 @@ fn plugins_path() -> PathBuf {
     }
 }
 
+/// Constructs the filename of this plugin for the current os.
+///
+/// On unix this returns libmemflow_[name]_[digest].so/.dylib
+/// On windows this returns memflow_[name]_[digest].dll
 fn plugin_file_name(variant: &PluginEntry) -> PathBuf {
     let mut file_name = plugins_path();
 
