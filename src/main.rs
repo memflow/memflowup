@@ -16,7 +16,8 @@ use crates_io_api::SyncClient;
 use inquire::Confirm;
 use log::Level;
 use package::PackageLoadOpts;
-use registry::RegistryClient;
+
+use registry::{RegistryClient, MEMFLOW_REGISTRY};
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -57,24 +58,28 @@ async fn main() -> Result<()> {
     match matches.subcommand() {
         Some(("push", matches)) => {
             // push libmemflow_coredump.aarch64.so
+            // TODO: sign + token
             unimplemented!()
         }
         Some(("pull", matches)) => {
             // pull coredump:latest
-            unimplemented!()
+            // support custom registries:
+            // registry.memflow.io/coredump:latest
+            let plugin_name = matches.get_one::<String>("plugin_name").unwrap();
+            let client = RegistryClient::new(MEMFLOW_REGISTRY);
+            let plugins = client.download(&plugin_name).await?;
+
+            Ok(())
         }
         Some(("plugins", matches)) => {
             // TODO: list local + remote plugins
             // TODO: allow changing registry
             match matches.subcommand() {
                 Some(("ls", _)) => {
-                    let client = RegistryClient::new("https://registry.memflow.io");
+                    let client = RegistryClient::new(MEMFLOW_REGISTRY);
                     let plugins = client.plugins().await?;
 
-                    println!(
-                        "{0: <16} {1}",
-                        "NAME", "DESCRIPTION"
-                    );
+                    println!("{0: <16} {1}", "NAME", "DESCRIPTION");
                     for plugin in plugins.iter() {
                         println!("{0: <16} {1: <10}", plugin.name, plugin.description);
                     }
@@ -82,7 +87,7 @@ async fn main() -> Result<()> {
                     Ok(())
                 }
                 _ => {
-                    todo!()
+                    unreachable!()
                 }
             }
         }
@@ -211,11 +216,15 @@ fn parse_args() -> ArgMatches {
                 .long("skip-version-check")
                 .action(ArgAction::SetTrue),
         )
-        .subcommand(
+        .subcommands([
+            Command::new("push"),
+            Command::new("pull").args([Arg::new("plugin_name")
+                .required(true)
+                .action(ArgAction::Set)]),
             Command::new("plugins")
                 .subcommand_required(true)
                 .subcommands([Command::new("ls")]),
-        )
+        ])
         .subcommand(
             add_package_opts(
                 Command::new("install")
