@@ -61,43 +61,67 @@ pub struct PluginDescriptor {
     pub description: String,
 }
 
-pub struct RegistryClient {
-    url: Url,
+/// Retrieves a list of all plugins and their descriptions.
+pub async fn plugins(registry: Option<&str>) -> Result<Vec<PluginName>> {
+    let mut path: Url = registry.unwrap_or(MEMFLOW_REGISTRY).parse().unwrap();
+    path.set_path("plugins");
+
+    let response = reqwest::get(path)
+        .await?
+        .json::<PluginsAllResponse>()
+        .await?;
+
+    Ok(response.plugins)
 }
 
-impl RegistryClient {
-    pub fn new<T: IntoUrl>(url: T) -> Self {
-        Self {
-            url: url.into_url().unwrap(),
+// Retrieves a list of all plugin versions
+pub async fn download(plugin_name: &str) -> Result<()> {
+    // TODO: unit tests
+    let plugin: PluginPath = plugin_name.parse()?;
+    println!("registry {}", plugin.registry());
+    println!("name {}", plugin.name());
+    println!("version {}", plugin.version());
+
+    let mut path: Url = plugin.registry().parse().unwrap();
+    path.set_path(&format!("plugins/{}", plugin.name()));
+
+    // setup filters
+    {
+        let mut query = path.query_pairs_mut();
+        if plugin.version() != "latest" {
+            query.append_pair("version", plugin.version());
         }
+        query.append_pair("memflow_plugin_version", "1"); // TODO:
+
+        // file_type
+        #[cfg(target_os = "windows")]
+        query.append_pair("file_type", "pe");
+        #[cfg(target_os = "linux")]
+        query.append_pair("file_type", "elf");
+        #[cfg(target_os = "macos")]
+        query.append_pair("file_type", "mach");
+
+        #[cfg(target_arch = "x86_64")]
+        query.append_pair("architecture", "x86_64");
+        #[cfg(target_arch = "x86")]
+        query.append_pair("architecture", "x86");
+        #[cfg(target_arch = "aarch64")]
+        query.append_pair("architecture", "arm64");
+        #[cfg(target_arch = "arm")]
+        query.append_pair("architecture", "arm");
+
+        // limit to the latest entry
+        query.append_pair("limit", "1");
     }
 
-    /// Retrieves a list of all plugins and their descriptions.
-    pub async fn plugins(&self) -> Result<Vec<PluginName>> {
-        let mut path = self.url.clone();
-        path.set_path("plugins");
+    let response = reqwest::get(path)
+        .await?
+        .json::<PluginsFindResponse>()
+        .await?;
 
-        let response = reqwest::get(path)
-            .await?
-            .json::<PluginsAllResponse>()
-            .await?;
+    println!("response: {:?}", response);
 
-        Ok(response.plugins)
-    }
-
-    // Retrieves a list of all plugin versions
-    pub async fn download(&self, plugin_name: &str) -> Result<()> {
-        // TODO: unit tests
-        let plugin: PluginPath = plugin_name.parse()?;
-        println!("registry {}", plugin.registry());
-        println!("name {}", plugin.name());
-        println!("version {}", plugin.version());
-
-        let mut path = self.url.clone();
-        //path.set_path(format!("plugins"));
-
-        Ok(())
-    }
+    Ok(())
 }
 
 /// Parses a plugin string into it's path components

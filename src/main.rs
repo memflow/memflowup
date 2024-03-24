@@ -17,7 +17,7 @@ use inquire::Confirm;
 use log::Level;
 use package::PackageLoadOpts;
 
-use registry::{RegistryClient, MEMFLOW_REGISTRY};
+use registry::MEMFLOW_REGISTRY;
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -66,8 +66,7 @@ async fn main() -> Result<()> {
             // support custom registries:
             // registry.memflow.io/coredump:latest
             let plugin_name = matches.get_one::<String>("plugin_name").unwrap();
-            let client = RegistryClient::new(MEMFLOW_REGISTRY);
-            let plugins = client.download(&plugin_name).await?;
+            let plugins = registry::download(&plugin_name).await?;
 
             Ok(())
         }
@@ -76,8 +75,7 @@ async fn main() -> Result<()> {
             // TODO: allow changing registry
             match matches.subcommand() {
                 Some(("ls", _)) => {
-                    let client = RegistryClient::new(MEMFLOW_REGISTRY);
-                    let plugins = client.plugins().await?;
+                    let plugins = registry::plugins(None).await?;
 
                     println!("{0: <16} {1}", "NAME", "DESCRIPTION");
                     for plugin in plugins.iter() {
