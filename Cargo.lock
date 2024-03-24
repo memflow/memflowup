@@ -1246,6 +1246,7 @@ dependencies = [
 name = "memflowup"
 version = "0.2.0"
 dependencies = [
+ "bytes",
  "clap",
  "console",
  "crates_io_api",

@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use bytes::BytesMut;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use futures_util::StreamExt;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -7,7 +8,7 @@ use log::warn;
 use tokio::{fs::File, io::AsyncWriteExt};
 
 use crate::error::{Error, Result};
-use memflow_registry_client::shared::{PluginUri, PluginVariant};
+use memflow_registry_client::shared::{PluginUri, PluginVariant, SignatureVerifier};
 
 fn to_http_err<S: ToString>(err: S) -> Error {
     Error::Http(err.to_string())
@@ -22,12 +23,27 @@ pub fn metadata() -> Command {
             .long("force")
             .help("forces download of the plugin even if it is already installed.")
             .action(ArgAction::SetTrue),
-    ])
+        Arg::new("pub-key")
+            .short('p')
+            .long("pub-key")
+            .help("the public key used to verify the binary signature (this is required for self-hosted registries)")
+            .action(ArgAction::Set),
+        ])
 }
 
 pub async fn handle(matches: &ArgMatches) -> Result<()> {
     let plugin_uri = matches.get_one::<String>("plugin_uri").unwrap();
     let force = matches.get_flag("force");
+    let pub_key = matches.get_one::<String>("pub-key");
+
+    // load the signature verifier
+    let verifier = if let Some(pub_key) = pub_key {
+        // load custom public key
+        SignatureVerifier::new(pub_key)
+    } else {
+        // use default bundled public key
+        SignatureVerifier::with_str(include_str!("../../default_verifying_key.pem"))
+    }?;
 
     // find the correct plugin variant based on the input arguments
     let plugin_uri: PluginUri = plugin_uri.parse()?;
@@ -59,16 +75,14 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
         }
     }
 
-    // create the plugin file
-    let mut file = File::create(&file_name).await?;
-
     println!(
         "{} Downloading plugin: {:?}",
         console::style("[-]").bold().dim(),
         file_name.file_name().unwrap()
     );
 
-    // write the file
+    // download the file to memory
+    let mut buffer = BytesMut::new();
     if let Some(content_length) = response.content_length() {
         let pb = ProgressBar::new(content_length);
         pb.set_style(ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta})")
@@ -79,21 +93,35 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
         let mut stream = response.bytes_stream();
         while let Some(chunk) = stream.next().await {
             let chunk = chunk.map_err(to_http_err)?;
-            file.write_all(chunk.as_ref()).await?;
+            buffer.extend_from_slice(chunk.as_ref());
             pb.inc(chunk.len() as u64);
         }
         pb.finish();
     } else {
         // no content-length set, fallback without progress bar
         warn!("skipping progress bar because content-length is not set");
-        file.write_all(&response.bytes().await.map_err(to_http_err)?.to_vec()[..])
-            .await?;
+        buffer.extend_from_slice(&response.bytes().await.map_err(to_http_err)?.to_vec()[..]);
     }
-    file.flush().await?;
+    let buffer = buffer.freeze();
 
-    // TODO: - download plugin to a temporary directory first
-    // TODO: - then verify signature
-    // TODO: - after signature verification copy plugin to final destination
+    // verify file signature
+    if verifier
+        .is_valid(buffer.as_ref(), &variant.signature)
+        .is_err()
+    {
+        println!(
+            "{} Plugin signature verification failed, when using a self-hosted registry please provide a custom public key",
+            console::style("[X]").bold().dim().red(),
+        );
+        return Err(Error::Signature(
+            "plugin signature verification failed".to_owned(),
+        ));
+    }
+
+    // write file (signature matches)
+    let mut file = File::create(&file_name).await?;
+    file.write_all(buffer.as_ref()).await?;
+    file.flush().await?;
 
     println!(
         "{} Downloaded plugin to: {:?}",
