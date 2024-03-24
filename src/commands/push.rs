@@ -9,6 +9,10 @@ use crate::error::Result;
 #[inline]
 pub fn metadata() -> Command {
     Command::new("push").args([
+        Arg::new("file_name")
+            .help("the file to upload")
+            .required(true)
+            .action(ArgAction::Set),
         Arg::new("registry")
             .short('r')
             .long("registry")
@@ -30,12 +34,14 @@ pub fn metadata() -> Command {
 }
 
 pub async fn handle(matches: &ArgMatches) -> Result<()> {
+    let file_name = matches.get_one::<String>("file_name").unwrap();
     let registry = matches.get_one::<String>("registry").unwrap();
     let token = matches.get_one::<String>("token");
     let priv_key = matches.get_one::<String>("priv-key").unwrap();
 
+    // TODO: upload progress
+
     let mut generator = SignatureGenerator::new(priv_key)?;
-    let file_name = "memflow_coredump.x86.dll";
     match memflow_registry_client::upload(
         Some(registry),
         token.map(String::as_str),
@@ -51,17 +57,9 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
                 file_name
             );
         }
-        Err(Error::Http(msg)) => {
-            println!(
-                "{} Error uploading plugin {:?}: {}",
-                console::style("[X]").bold().dim().red(),
-                file_name,
-                msg
-            );
-        }
         Err(msg) => {
             println!(
-                "{} Unknown error when uploading plugin {:?}: {}",
+                "{} Unable to upload plugin {:?}: {}",
                 console::style("[X]").bold().dim().red(),
                 file_name,
                 msg
