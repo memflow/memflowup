@@ -77,7 +77,7 @@ pub async fn plugins(registry: Option<&str>) -> Result<Vec<PluginName>> {
 // Retrieves a list of all plugin versions
 pub async fn download(plugin_name: &str) -> Result<()> {
     // TODO: unit tests
-    let plugin: PluginPath = plugin_name.parse()?;
+    let plugin: PluginUri = plugin_name.parse()?;
     println!("registry {}", plugin.registry());
     println!("name {}", plugin.name());
     println!("version {}", plugin.version());
@@ -121,6 +121,8 @@ pub async fn download(plugin_name: &str) -> Result<()> {
 
     println!("response: {:?}", response);
 
+    // TODO: download
+
     Ok(())
 }
 
@@ -132,13 +134,13 @@ pub async fn download(plugin_name: &str) -> Result<()> {
 /// `coredump:latest` - will also pull latest
 /// `coredump:0.2.0` - will pull the newest binary with this specific version
 /// `memflow.registry.io/coredump` - pulls from another registry
-struct PluginPath {
+struct PluginUri {
     registry: Option<String>,
     name: String,
     version: Option<String>,
 }
 
-impl PluginPath {
+impl PluginUri {
     #[inline]
     pub fn registry(&self) -> &str {
         self.registry.as_deref().unwrap_or(MEMFLOW_REGISTRY)
@@ -155,7 +157,7 @@ impl PluginPath {
     }
 }
 
-impl FromStr for PluginPath {
+impl FromStr for PluginUri {
     type Err = Error;
 
     fn from_str(s: &str) -> std::prelude::v1::Result<Self, Self::Err> {
@@ -172,7 +174,7 @@ impl FromStr for PluginPath {
             ));
         }
 
-        Ok(PluginPath {
+        Ok(PluginUri {
             registry: if path.len() > 1 {
                 Some(path[0].to_owned())
             } else {
@@ -190,7 +192,7 @@ pub mod tests {
 
     #[test]
     pub fn plugin_path_simple() {
-        let path: PluginPath = "coredump".parse().unwrap();
+        let path: PluginUri = "coredump".parse().unwrap();
         assert_eq!(path.registry(), MEMFLOW_REGISTRY);
         assert_eq!(path.name(), "coredump");
         assert_eq!(path.version(), "latest");
@@ -198,7 +200,7 @@ pub mod tests {
 
     #[test]
     pub fn plugin_path_with_version() {
-        let path: PluginPath = "coredump:0.2.0".parse().unwrap();
+        let path: PluginUri = "coredump:0.2.0".parse().unwrap();
         assert_eq!(path.registry(), MEMFLOW_REGISTRY);
         assert_eq!(path.name(), "coredump");
         assert_eq!(path.version(), "0.2.0");
@@ -206,7 +208,7 @@ pub mod tests {
 
     #[test]
     pub fn plugin_path_with_registry() {
-        let path: PluginPath = "registry.memflow.xyz/coredump:0.2.0".parse().unwrap();
+        let path: PluginUri = "registry.memflow.xyz/coredump:0.2.0".parse().unwrap();
         assert_eq!(path.registry(), "registry.memflow.xyz");
         assert_eq!(path.name(), "coredump");
         assert_eq!(path.version(), "0.2.0");
@@ -214,13 +216,13 @@ pub mod tests {
 
     #[test]
     pub fn plugin_path_invalid_path() {
-        let path: Result<PluginPath> = "registry.memflow.xyz/coredump/test1234".parse();
+        let path: Result<PluginUri> = "registry.memflow.xyz/coredump/test1234".parse();
         assert!(path.is_err())
     }
 
     #[test]
     pub fn plugin_path_invalid_version() {
-        let path: Result<PluginPath> = "test1234:0.2.0:1.0.0".parse();
+        let path: Result<PluginUri> = "test1234:0.2.0:1.0.0".parse();
         assert!(path.is_err())
     }
 }
