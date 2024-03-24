@@ -2,30 +2,30 @@ use std::{fmt::Display, str::FromStr};
 
 use chrono::NaiveDateTime;
 use reqwest::{IntoUrl, Response, Url};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
 
 pub const MEMFLOW_REGISTRY: &str = "https://registry.memflow.io";
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct PluginsAllResponse {
     plugins: Vec<PluginName>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PluginName {
     pub name: String,
     pub description: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct PluginsFindResponse {
     plugins: Vec<PluginEntry>,
     skip: usize,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PluginEntry {
     pub digest: String,
     pub signature: String,
@@ -33,7 +33,7 @@ pub struct PluginEntry {
     pub descriptor: PluginDescriptor,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum PluginArchitecture {
     Unknown(u32),
@@ -43,7 +43,7 @@ pub enum PluginArchitecture {
     Arm64,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum PluginFileType {
     Pe,
@@ -51,7 +51,7 @@ pub enum PluginFileType {
     Mach,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PluginDescriptor {
     pub file_type: PluginFileType,
     pub architecture: PluginArchitecture,

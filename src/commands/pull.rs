@@ -57,7 +57,7 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
         }
     }
 
-    // create the file
+    // create the plugin file
     let mut file = File::create(&file_name).await?;
 
     println!(
@@ -99,6 +99,12 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
         file_name.as_os_str(),
     );
 
+    // store .meta file of plugin containing all relevant information
+    // TODO: this does not contain all plugins in this file - allow querying that from memflow-registry as well
+    let mut file_name = file_name.clone();
+    file_name.set_extension("meta");
+    tokio::fs::write(file_name, serde_json::to_string_pretty(&variant)?).await?;
+
     Ok(())
 }
 
@@ -122,19 +128,19 @@ fn plugin_file_name(variant: &PluginEntry) -> PathBuf {
     let mut file_name = plugins_path();
 
     // prepend the library name and append the file digest
-    file_name = if cfg!(unix) {
-        file_name.join(&format!(
+    if cfg!(unix) {
+        file_name.push(&format!(
             "libmemflow_{}_{}",
             variant.descriptor.name,
             &variant.digest[..7]
         ))
     } else {
-        file_name.join(&format!(
+        file_name.push(&format!(
             "memflow_{}_{}",
             variant.descriptor.name,
             &variant.digest[..7]
         ))
-    };
+    }
 
     // append appropriate file extension
     #[cfg(target_os = "windows")]

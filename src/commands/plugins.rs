@@ -20,12 +20,20 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
 
                 // TODO: dedup versions
 
-                println!("{0: <16} {1: <16} {2: <16} {3}", "NAME", "VERSION", "DIGEST", "UPLOADED");
+                println!(
+                    "{0: <16} {1: <16} {2: <16} {3}",
+                    "NAME", "VERSION", "DIGEST", "UPLOADED"
+                );
                 for plugin in plugins.iter() {
-                    println!("{0: <16} {1: <16} {2: <16} {3}", plugin_name, plugin.descriptor.version, &plugin.digest[..7], plugin.created_at);
+                    println!(
+                        "{0: <16} {1: <16} {2: <16} {3}",
+                        plugin_name,
+                        plugin.descriptor.version,
+                        &plugin.digest[..7],
+                        plugin.created_at
+                    );
                 }
                 //println!("{0: <16} {1: <10}", "TOTAL", plugins.len());
-
             } else {
                 // list all plugins
                 let plugins = registry::plugins(None).await?;
