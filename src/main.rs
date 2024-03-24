@@ -54,11 +54,7 @@ async fn main() -> Result<()> {
 
     match matches.subcommand() {
         // memflowup 0.2
-        Some(("push", matches)) => {
-            // push libmemflow_coredump.aarch64.so
-            // TODO: sign + token
-            unimplemented!()
-        }
+        Some(("push", matches)) => commands::push::handle(matches).await,
         Some(("pull", matches)) => commands::pull::handle(matches).await,
         Some(("registry", matches)) => commands::registry::handle(matches).await,
 

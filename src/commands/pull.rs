@@ -97,7 +97,7 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
 
     println!(
         "{} Downloaded plugin to: {:?}",
-        console::style("[=]").bold().dim(),
+        console::style("[=]").bold().dim().green(),
         file_name.as_os_str(),
     );
 
@@ -109,7 +109,7 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
 
     println!(
         "{} Wrote plugin metadata to: {:?}",
-        console::style("[=]").bold().dim(),
+        console::style("[=]").bold().dim().green(),
         file_name.as_os_str(),
     );
 
