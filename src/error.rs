@@ -23,6 +23,8 @@ pub enum Error {
     // External crate error forwards
     #[error("HTTP error: {0}")]
     Http(String),
+    #[error("Registry error: {0}")]
+    Registry(String),
     #[error("Signature error: {0}")]
     Signature(String),
 }
@@ -51,12 +53,6 @@ impl From<std::str::Utf8Error> for Error {
     }
 }
 
-// impl From<k256::ecdsa::Error> for Error {
-//     fn from(err: k256::ecdsa::Error) -> Self {
-//         Error::Signature(err.to_string())
-//     }
-// }
-
 impl From<std::num::ParseIntError> for Error {
     fn from(err: std::num::ParseIntError) -> Self {
         Error::Parse(err.to_string())
@@ -69,20 +65,14 @@ impl From<serde_json::error::Error> for Error {
     }
 }
 
-impl From<reqwest::Error> for Error {
-    fn from(err: reqwest::Error) -> Self {
-        Error::Http(err.to_string())
-    }
-}
-
-impl From<reqwest::header::InvalidHeaderValue> for Error {
-    fn from(err: reqwest::header::InvalidHeaderValue) -> Self {
-        Error::Http(err.to_string())
-    }
-}
-
 impl From<crates_io_api::Error> for Error {
     fn from(err: crates_io_api::Error) -> Self {
         Error::Http(err.to_string())
+    }
+}
+
+impl From<memflow_registry_client::Error> for Error {
+    fn from(err: memflow_registry_client::Error) -> Self {
+        Error::Registry(err.to_string())
     }
 }

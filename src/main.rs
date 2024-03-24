@@ -5,13 +5,10 @@ mod error;
 mod github_api;
 mod oneshot;
 mod package;
-mod registry;
 mod setup_mode;
 mod util;
 
-use indicatif::{ProgressBar, ProgressStyle};
-use log::warn;
-use std::{future::IntoFuture, process::exit, time::Duration};
+use std::{process::exit, time::Duration};
 
 use clap::*;
 use crates_io_api::SyncClient;
@@ -20,8 +17,6 @@ use log::Level;
 use package::PackageLoadOpts;
 
 use error::{Error, Result};
-use futures_util::stream::StreamExt;
-use registry::{PluginUri, MEMFLOW_REGISTRY};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -135,7 +130,7 @@ fn check_for_update() -> Result<()> {
     Ok(())
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(target_family = "unix")]
 fn check_root() -> Result<()> {
     let is_root = unsafe { libc::getuid() } == 0;
     if is_root {
@@ -158,7 +153,7 @@ fn check_root() -> Result<()> {
     Ok(())
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(target_family = "unix"))]
 fn check_root() -> Result<()> {
     Ok(())
 }

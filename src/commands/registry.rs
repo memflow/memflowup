@@ -1,6 +1,6 @@
 use clap::{Arg, ArgAction, ArgMatches, Command};
 
-use crate::{error::Result, registry};
+use crate::error::Result;
 
 #[inline]
 pub fn metadata() -> Command {
@@ -28,7 +28,7 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
                 let versions = matches.get_flag("versions");
 
                 // list all plugins
-                let plugins = registry::plugins(None).await?;
+                let plugins = memflow_registry_client::plugins(None).await?;
                 if versions {
                     // TODO: display plugins that do not have a version for our current os?
                     print_plugin_versions_header();
@@ -59,7 +59,7 @@ fn print_plugin_versions_header() {
 }
 async fn list_plugin_versions(plugin_name: &str, limit: usize) -> Result<()> {
     // list versions of a specific plugin
-    let plugins = registry::plugin_versions(None, plugin_name, limit).await?;
+    let plugins = memflow_registry_client::plugin_versions(None, plugin_name, limit).await?;
     // TODO: dedup versions
 
     for plugin in plugins.iter() {

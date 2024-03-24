@@ -6,10 +6,12 @@ use indicatif::{ProgressBar, ProgressStyle};
 use log::warn;
 use tokio::{fs::File, io::AsyncWriteExt};
 
-use crate::{
-    error::{Error, Result},
-    registry::{self, PluginEntry, PluginUri},
-};
+use crate::error::{Error, Result};
+use memflow_registry_client::shared::{PluginUri, PluginVariant};
+
+fn to_http_err<S: ToString>(err: S) -> Error {
+    Error::Http(err.to_string())
+}
 
 #[inline]
 pub fn metadata() -> Command {
@@ -29,10 +31,10 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
 
     // find the correct plugin variant based on the input arguments
     let plugin_uri: PluginUri = plugin_uri.parse()?;
-    let variant = registry::find_by_uri(&plugin_uri).await?;
+    let variant = memflow_registry_client::find_by_uri(&plugin_uri).await?;
 
     // query file
-    let response = registry::download(&plugin_uri, &variant).await?;
+    let response = memflow_registry_client::download(&plugin_uri, &variant).await?;
 
     // check if file already exists
     let file_name = plugin_file_name(&variant);
@@ -76,7 +78,7 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
         // download data in chunks to show progress
         let mut stream = response.bytes_stream();
         while let Some(chunk) = stream.next().await {
-            let chunk = chunk?;
+            let chunk = chunk.map_err(to_http_err)?;
             file.write_all(chunk.as_ref()).await?;
             pb.inc(chunk.len() as u64);
         }
@@ -84,7 +86,7 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
     } else {
         // no content-length set, fallback without progress bar
         warn!("skipping progress bar because content-length is not set");
-        file.write_all(&response.bytes().await?.to_vec()[..])
+        file.write_all(&response.bytes().await.map_err(to_http_err)?.to_vec()[..])
             .await?;
     }
     file.flush().await?;
@@ -134,7 +136,7 @@ fn plugins_path() -> PathBuf {
 ///
 /// On unix this returns libmemflow_[name]_[digest].so/.dylib
 /// On windows this returns memflow_[name]_[digest].dll
-fn plugin_file_name(variant: &PluginEntry) -> PathBuf {
+fn plugin_file_name(variant: &PluginVariant) -> PathBuf {
     let mut file_name = plugins_path();
 
     // prepend the library name and append the file digest
