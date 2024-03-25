@@ -7,7 +7,10 @@ use indicatif::{ProgressBar, ProgressStyle};
 use log::warn;
 use tokio::{fs::File, io::AsyncWriteExt};
 
-use crate::error::{Error, Result};
+use crate::{
+    commands::plugin_file_name,
+    error::{Error, Result},
+};
 use memflow_registry_client::shared::{PluginUri, PluginVariant, SignatureVerifier};
 
 fn to_http_err<S: ToString>(err: S) -> Error {
@@ -183,53 +186,4 @@ async fn pull(plugin_uri: &str, force: bool, pub_key: Option<&str>) -> Result<()
     );
 
     Ok(())
-}
-
-/// Returns the path in which memflow plugins are stored.
-///
-/// On unix this is returns ~/.local/lib/memflow
-/// On windows this returns C:\Users\[Username]\Documents\memflow
-fn plugins_path() -> PathBuf {
-    if cfg!(unix) {
-        dirs::home_dir()
-            .unwrap()
-            .join(".local")
-            .join("lib")
-            .join("memflow")
-    } else {
-        dirs::document_dir().unwrap().join("memflow")
-    }
-}
-
-/// Constructs the filename of this plugin for the current os.
-///
-/// On unix this returns libmemflow_[name]_[digest].so/.dylib
-/// On windows this returns memflow_[name]_[digest].dll
-fn plugin_file_name(variant: &PluginVariant) -> PathBuf {
-    let mut file_name = plugins_path();
-
-    // prepend the library name and append the file digest
-    if cfg!(unix) {
-        file_name.push(&format!(
-            "libmemflow_{}_{}",
-            variant.descriptor.name,
-            &variant.digest[..7]
-        ))
-    } else {
-        file_name.push(&format!(
-            "memflow_{}_{}",
-            variant.descriptor.name,
-            &variant.digest[..7]
-        ))
-    }
-
-    // append appropriate file extension
-    #[cfg(target_os = "windows")]
-    file_name.set_extension("dll");
-    #[cfg(target_os = "linux")]
-    file_name.set_extension("so");
-    #[cfg(target_os = "macos")]
-    file_name.set_extension("dylib");
-
-    file_name
 }
