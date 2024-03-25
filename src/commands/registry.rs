@@ -59,7 +59,7 @@ fn print_plugin_versions_header() {
 }
 async fn list_plugin_versions(plugin_name: &str, limit: usize) -> Result<()> {
     // list versions of a specific plugin
-    let plugins = memflow_registry_client::plugin_versions(None, plugin_name, limit).await?;
+    let plugins = memflow_registry_client::plugin_versions(None, plugin_name, None, limit).await?;
     // TODO: dedup versions
 
     for plugin in plugins.iter() {

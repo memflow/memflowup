@@ -1,8 +1,5 @@
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use memflow_registry_client::{
-    shared::{SignatureGenerator, MEMFLOW_DEFAULT_REGISTRY},
-    Error,
-};
+use memflow_registry_client::shared::{SignatureGenerator, MEMFLOW_DEFAULT_REGISTRY};
 
 use crate::error::Result;
 

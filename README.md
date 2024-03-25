@@ -49,3 +49,19 @@ Reinstall a connector:
 ```
 memflowup install memflow-kvm -s -d --reinstall
 ```
+
+## Migration from 0.1
+
+- TODO: auto migration? -> ask user if he wants to run it
+- Delete all system-wide installed plugins in /... -> ask
+- Delete plugin database in /.. -> ask
+- Purge all plugins that have no meta file -> ask
+- Ask to redownload all plugins -> ask
+- TODO: how do we know if migrations ran successfully and we do not have to run them again?
+
+- Create a config file to store things like token / priv key file (additioanlly to cmdline switches)
+  memflowup config token 123456
+  memflowup config priv-key-file bla.pem -> will store fullpath in config
+  memflowup config registry xyz.registry.io # overwrite default registry
+
+- store current memflowup version in config file to see what migration steps need to be run

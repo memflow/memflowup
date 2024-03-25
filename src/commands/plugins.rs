@@ -1,12 +1,12 @@
 //! Clap subcommand to list all installed plugins
 
 use chrono::{DateTime, Utc};
-use clap::{Arg, ArgAction, ArgMatches, Command};
+use clap::{ArgMatches, Command};
 use memflow_registry_client::shared::PluginVariant;
 
 use crate::{
     commands::{plugin_extension, plugins_path},
-    error::{Error, Result},
+    error::Result,
 };
 
 #[inline]

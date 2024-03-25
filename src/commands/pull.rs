@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use bytes::BytesMut;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use futures_util::StreamExt;
@@ -11,7 +9,7 @@ use crate::{
     commands::plugin_file_name,
     error::{Error, Result},
 };
-use memflow_registry_client::shared::{PluginUri, PluginVariant, SignatureVerifier};
+use memflow_registry_client::shared::{PluginUri, SignatureVerifier};
 
 fn to_http_err<S: ToString>(err: S) -> Error {
     Error::Http(err.to_string())
@@ -91,7 +89,7 @@ async fn pull(plugin_uri: &str, force: bool, pub_key: Option<&str>) -> Result<()
 
     // find the correct plugin variant based on the input arguments
     let plugin_uri: PluginUri = plugin_uri.parse()?;
-    let variant = memflow_registry_client::find_by_uri(&plugin_uri).await?;
+    let variant = memflow_registry_client::find_by_uri(&plugin_uri, None).await?;
 
     // check if file already exists
     let file_name = plugin_file_name(&variant);
@@ -154,12 +152,10 @@ async fn pull(plugin_uri: &str, force: bool, pub_key: Option<&str>) -> Result<()
         .is_err()
     {
         println!(
-            "{} Plugin signature verification failed, when using a self-hosted registry please provide a custom public key",
+            "{} Plugin signature verification failed (in case you're using a self-hosted registry, please provide a custom public key)",
             console::style("[X]").bold().dim().red(),
         );
-        return Err(Error::Signature(
-            "plugin signature verification failed".to_owned(),
-        ));
+        return Err(Error::Signature("plugin verification failed".to_owned()));
     }
 
     // write file (signature matches)
