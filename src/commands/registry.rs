@@ -100,7 +100,7 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
 
 fn print_plugin_versions_header() {
     println!(
-        "{0: <16} {1: <16} {2: <16} {3: <16} {4: <64} {5}",
+        "{0: <16} {1: <16} {2: <16} {3: <8} {4: <65} {5:}",
         "NAME", "VERSION", "PLUGIN_VERSION", "DIGEST", "DIGEST_LONG", "CREATED"
     );
 }
@@ -116,7 +116,7 @@ async fn list_plugin_versions(
 
     for plugin in plugins.iter() {
         println!(
-            "{0: <16} {1: <16} {2: <16} {3: <16} {4: <64} {5}",
+            "{0: <16} {1: <16} {2: <16} {3: <8} {4: <65} {5:}",
             plugin_name,
             plugin.descriptor.version,
             plugin.descriptor.plugin_version,

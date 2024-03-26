@@ -64,7 +64,7 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
 async fn list_local_plugins(plugin_name: Option<&str>) -> Result<()> {
     // identical to print_plugin_versions_header() // TODO: restructure
     println!(
-        "{0: <16} {1: <16} {2: <16} {3: <16} {4: <64} {5:}",
+        "{0: <16} {1: <16} {2: <16} {3: <8} {4: <65} {5:}",
         "NAME", "VERSION", "PLUGIN_VERSION", "DIGEST", "DIGEST_LONG", "CREATED"
     );
     let plugins = local_plugins().await?;
@@ -77,7 +77,7 @@ async fn list_local_plugins(plugin_name: Option<&str>) -> Result<()> {
         }
 
         println!(
-            "{0: <16} {1: <16} {2: <16} {3: <16} {4: <64} {5:}",
+            "{0: <16} {1: <16} {2: <16} {3: <8} {4: <65} {5:}",
             variant.descriptor.name,
             variant.descriptor.version,
             variant.descriptor.plugin_version,

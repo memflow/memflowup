@@ -27,8 +27,8 @@ async fn main() -> Result<()> {
 
     // check for update after we parsed the args
     if !matches.get_flag("skip-version-check") {
-        #[cfg(not(debug_assertions))]
-        check_for_update().ok();
+        //#[cfg(not(debug_assertions))]
+        //check_for_update().ok();
         #[cfg(debug_assertions)]
         println!("Skipping update check in debug mode.");
     }
