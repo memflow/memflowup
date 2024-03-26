@@ -1,54 +1,44 @@
 //! Clap subcommand to list all installed plugins
 
+use std::path::PathBuf;
+
 use chrono::{DateTime, Utc};
-use clap::{ArgMatches, Command};
-use memflow_registry_client::shared::PluginVariant;
+use clap::{Arg, ArgAction, ArgMatches, Command};
+use memflow_registry_client::shared::{PluginUri, PluginVariant};
 
 use crate::{
     commands::{plugin_extension, plugins_path},
-    error::Result,
+    error::{Error, Result},
 };
 
 #[inline]
 pub fn metadata() -> Command {
     Command::new("plugins")
         .subcommand_required(true)
-        .subcommands([Command::new("list").alias("ls"), Command::new("purge")])
+        .subcommands([
+            Command::new("list").alias("ls"),
+            Command::new("purge"),
+            Command::new("remove")
+                .alias("rm")
+                .args([Arg::new("plugin_uri").action(ArgAction::Append)]),
+        ])
 }
 
 pub async fn handle(matches: &ArgMatches) -> Result<()> {
     match matches.subcommand() {
-        Some(("list", _)) => {
-            // identical to print_plugin_versions_header() // TODO: restructure
-            println!(
-                "{0: <16} {1: <16} {2: <16} {3: <16} {4: <32} {5}",
-                "NAME", "VERSION", "PLUGIN_VERSION", "DIGEST", "CREATED", "DOWNLOADED"
-            );
-            let paths = std::fs::read_dir(plugins_path())?;
-            for path in paths.filter_map(|p| p.ok()) {
-                if let Some(extension) = path.path().extension() {
-                    if extension.to_str().unwrap_or_default() == "meta" {
-                        if let Ok(metadata) = serde_json::from_str::<PluginVariant>(
-                            &tokio::fs::read_to_string(path.path()).await?,
-                        ) {
-                            let file_metadata = tokio::fs::metadata(path.path()).await?;
-                            let datetime: DateTime<Utc> = file_metadata.created()?.into();
-                            println!(
-                                "{0: <16} {1: <16} {2: <16} {3: <16} {4: <32} {5:}",
-                                metadata.descriptor.name,
-                                metadata.descriptor.version,
-                                metadata.descriptor.plugin_version,
-                                &metadata.digest[..7],
-                                metadata.created_at.to_string(),
-                                datetime.naive_utc().to_string(),
-                            );
-                        } else {
-                            // TODO: print warning about orphaned plugin and give hints
-                            // on how to install plugins from source with memflowup
-                        }
-                    }
-                }
+        Some(("list", _)) => list_local_plugins().await,
+        Some(("remove", matches)) => {
+            let plugin_uris = matches
+                .get_many::<String>("plugin_uri")
+                .unwrap_or_default()
+                .cloned()
+                .collect::<Vec<_>>();
+
+            for plugin_uri in plugin_uris.iter() {
+                remove_local_plugin(&plugin_uri).await?;
             }
+
+            Ok(())
         }
         Some(("purge", _)) => {
             // TODO: find and clean all files that have no .meta file
@@ -59,11 +49,95 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
                 console::style("[=]").bold().dim().green(),
                 orphaned,
             );
+            Ok(())
         }
         _ => unreachable!(),
     }
+}
 
+async fn list_local_plugins() -> Result<()> {
+    // identical to print_plugin_versions_header() // TODO: restructure
+    println!(
+        "{0: <16} {1: <16} {2: <16} {3: <16} {4: <32} {5}",
+        "NAME", "VERSION", "PLUGIN_VERSION", "DIGEST", "CREATED", "DOWNLOADED"
+    );
+    let plugins = local_plugins().await?;
+    for (file_name, variant) in plugins.into_iter() {
+        let file_metadata = std::fs::metadata(file_name)?;
+        let datetime: DateTime<Utc> = file_metadata.created()?.into();
+        println!(
+            "{0: <16} {1: <16} {2: <16} {3: <16} {4: <32} {5:}",
+            variant.descriptor.name,
+            variant.descriptor.version,
+            variant.descriptor.plugin_version,
+            &variant.digest[..7],
+            variant.created_at.to_string(),
+            datetime.naive_utc().to_string(),
+        );
+    }
     Ok(())
+}
+
+async fn remove_local_plugin(plugin_uri: &str) -> Result<()> {
+    let plugin_uri: PluginUri = plugin_uri.parse()?;
+
+    // TODO: sort in the same way the backend would sort plugins
+    let plugins = local_plugins().await?;
+    for (meta_file_name, variant) in plugins.into_iter() {
+        let version = plugin_uri.version();
+        if variant.descriptor.name == plugin_uri.image()
+            && (version == "latest"
+                || version == variant.descriptor.version
+                || version == &variant.digest[..version.len()])
+        {
+            // delete plugin binary
+            let mut plugin_file_name = meta_file_name.clone();
+            plugin_file_name.set_extension(plugin_extension());
+            if let Err(err) = tokio::fs::remove_file(&plugin_file_name).await {
+                println!(
+                    "{} Unable to delete plugin {:?}: {}",
+                    console::style("[X]").bold().dim().red(),
+                    plugin_file_name
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_os_string(),
+                    err
+                );
+                return Err(err.into());
+            }
+
+            // delete meta file
+            if let Err(err) = tokio::fs::remove_file(&meta_file_name).await {
+                println!(
+                    "{} Unable to delete .meta file for plugin {:?}: {}",
+                    console::style("[X]").bold().dim().red(),
+                    meta_file_name
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_os_string(),
+                    err
+                );
+                return Err(err.into());
+            }
+
+            println!(
+                "{} Deleted plugin: {:?}",
+                console::style("[=]").bold().dim().green(),
+                plugin_file_name.as_os_str(),
+            );
+            return Ok(());
+        }
+    }
+
+    println!(
+        "{} Plugin `{}` not found",
+        console::style("[X]").bold().dim().red(),
+        plugin_uri
+    );
+    Err(Error::NotFound(format!(
+        "plugin `{}` not found",
+        plugin_uri
+    )))
 }
 
 /// Removes all plugins which do not have a proper .meta file associated with them.
@@ -102,15 +176,17 @@ async fn remove_orphaned_plugins() -> Result<usize> {
 
                 if let Some(reason) = orphaned {
                     // TODO: try parse metafile and check digest to be triple sure
-                    println!(
-                        "{} Deleting orphaned plugin: {:?} ({})",
-                        console::style("[=]").bold().dim().green(),
-                        path.path().as_os_str(),
-                        reason
-                    );
 
                     // remove plugin
-                    tokio::fs::remove_file(path.path()).await?;
+                    if let Err(err) = tokio::fs::remove_file(path.path()).await {
+                        println!(
+                            "{} Unable to delete plugin {:?}: {}",
+                            console::style("[X]").bold().dim().red(),
+                            path.path().file_name().unwrap_or_default().to_os_string(),
+                            err
+                        );
+                        return Err(err.into());
+                    }
 
                     // try to remove meta file (this is allowed to fail)
                     let mut meta_file_name = path.path();
@@ -127,6 +203,13 @@ async fn remove_orphaned_plugins() -> Result<usize> {
                         }
                     }
 
+                    println!(
+                        "{} Deleted orphaned plugin: {:?} ({})",
+                        console::style("[=]").bold().dim().green(),
+                        path.path().as_os_str(),
+                        reason
+                    );
+
                     orphaned_plugins += 1;
                     continue;
                 }
@@ -135,4 +218,37 @@ async fn remove_orphaned_plugins() -> Result<usize> {
     }
 
     Ok(orphaned_plugins)
+}
+
+/// Returns a list of all local plugins with their .meta information attached (sorted in the same way as memflow-registry)
+async fn local_plugins() -> Result<Vec<(PathBuf, PluginVariant)>> {
+    let mut result = Vec::new();
+
+    let paths = std::fs::read_dir(plugins_path())?;
+    for path in paths.filter_map(|p| p.ok()) {
+        if let Some(extension) = path.path().extension() {
+            if extension.to_str().unwrap_or_default() == "meta" {
+                if let Ok(metadata) = serde_json::from_str::<PluginVariant>(
+                    &tokio::fs::read_to_string(path.path()).await?,
+                ) {
+                    // TODO: additionally check existence of the file name and pass it over
+                    result.push((path.path(), metadata));
+                } else {
+                    // TODO: print warning about orphaned plugin and give hints
+                    // on how to install plugins from source with memflowup
+                }
+            }
+        }
+    }
+
+    // sort by plugin_name, plugin_version and created_at
+    result.sort_by_key(|(_, variant)| {
+        (
+            variant.descriptor.name.clone(),
+            variant.descriptor.version.clone(),
+            variant.created_at,
+        )
+    });
+
+    Ok(result)
 }
