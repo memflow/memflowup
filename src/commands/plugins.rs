@@ -6,7 +6,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use chrono::{DateTime, Utc};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use memflow_registry_client::shared::{PluginUri, PluginVariant};
 
@@ -65,8 +64,8 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
 async fn list_local_plugins(plugin_name: Option<&str>) -> Result<()> {
     // identical to print_plugin_versions_header() // TODO: restructure
     println!(
-        "{0: <16} {1: <16} {2: <16} {3: <16} {4: <64} {5: <32} {6}",
-        "NAME", "VERSION", "PLUGIN_VERSION", "DIGEST", "DIGEST_LONG", "CREATED", "DOWNLOADED"
+        "{0: <16} {1: <16} {2: <16} {3: <16} {4: <64} {5:}",
+        "NAME", "VERSION", "PLUGIN_VERSION", "DIGEST", "DIGEST_LONG", "CREATED"
     );
     let plugins = local_plugins().await?;
     for (file_name, variant) in plugins.into_iter() {
@@ -77,17 +76,14 @@ async fn list_local_plugins(plugin_name: Option<&str>) -> Result<()> {
             }
         }
 
-        let file_metadata = std::fs::metadata(file_name)?;
-        let datetime: DateTime<Utc> = file_metadata.created()?.into();
         println!(
-            "{0: <16} {1: <16} {2: <16} {3: <16} {4: <64} {5: <32} {6:}",
+            "{0: <16} {1: <16} {2: <16} {3: <16} {4: <64} {5:}",
             variant.descriptor.name,
             variant.descriptor.version,
             variant.descriptor.plugin_version,
             &variant.digest[..7],
             variant.digest,
             variant.created_at.to_string(),
-            datetime.naive_utc().to_string(),
         );
     }
     Ok(())
