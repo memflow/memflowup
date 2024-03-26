@@ -1,17 +1,13 @@
 //! Clap subcommand to list all installed plugins
 
-use std::{
-    cmp::Reverse,
-    collections::HashSet,
-    path::{Path, PathBuf},
-};
+use std::{collections::HashSet, path::Path};
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use memflow_registry_client::shared::{PluginUri, PluginVariant};
 
 use crate::{
-    commands::{plugin_extension, plugins_path},
     error::{Error, Result},
+    util,
 };
 
 #[inline]
@@ -42,7 +38,7 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
                 .collect::<Vec<_>>();
 
             for plugin_uri in plugin_uris.iter() {
-                remove_local_plugin(&plugin_uri).await?;
+                remove_local_plugin(plugin_uri).await?;
             }
 
             Ok(())
@@ -51,7 +47,7 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
             let orphaned = remove_orphaned_plugins().await?;
             let old_versions = remove_old_plugin_versions().await?;
             println!(
-                "{} Plugins purged, removed {} plugins.",
+                "{} Plugins cleaned, removed {} plugins.",
                 console::style("[=]").bold().dim().green(),
                 orphaned + old_versions,
             );
@@ -64,11 +60,11 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
 async fn list_local_plugins(plugin_name: Option<&str>) -> Result<()> {
     // identical to print_plugin_versions_header() // TODO: restructure
     println!(
-        "{0: <16} {1: <16} {2: <16} {3: <16} {4: <64} {5:}",
-        "NAME", "VERSION", "PLUGIN_VERSION", "DIGEST", "DIGEST_LONG", "CREATED"
+        "{0: <16} {1: <16} {2: <16} {3: <16} {4: <64} CREATED",
+        "NAME", "VERSION", "PLUGIN_VERSION", "DIGEST", "DIGEST_LONG"
     );
-    let plugins = local_plugins().await?;
-    for (file_name, variant) in plugins.into_iter() {
+    let plugins = util::local_plugins().await?;
+    for (_, variant) in plugins.into_iter() {
         // optionally filter by plugin name
         if let Some(plugin_name) = plugin_name {
             if variant.descriptor.name != plugin_name {
@@ -83,7 +79,7 @@ async fn list_local_plugins(plugin_name: Option<&str>) -> Result<()> {
             variant.descriptor.plugin_version,
             &variant.digest[..7],
             variant.digest,
-            variant.created_at.to_string(),
+            variant.created_at,
         );
     }
     Ok(())
@@ -92,7 +88,7 @@ async fn list_local_plugins(plugin_name: Option<&str>) -> Result<()> {
 async fn remove_local_plugin(plugin_uri_str: &str) -> Result<()> {
     let plugin_uri: PluginUri = plugin_uri_str.parse()?;
 
-    let plugins = local_plugins().await?;
+    let plugins = util::local_plugins().await?;
     for (meta_file_name, variant) in plugins.into_iter() {
         // we match the following cases here:
         // plugin_uri is a digest
@@ -125,7 +121,7 @@ async fn remove_local_plugin(plugin_uri_str: &str) -> Result<()> {
 async fn remove_local_plugin_file(meta_file_name: &Path) -> Result<()> {
     // delete plugin binary
     let mut plugin_file_name = meta_file_name.to_path_buf();
-    plugin_file_name.set_extension(plugin_extension());
+    plugin_file_name.set_extension(util::plugin_extension());
     if let Err(err) = tokio::fs::remove_file(&plugin_file_name).await {
         println!(
             "{} Unable to delete plugin {:?}: {}",
@@ -166,11 +162,11 @@ async fn remove_local_plugin_file(meta_file_name: &Path) -> Result<()> {
 async fn remove_orphaned_plugins() -> Result<usize> {
     let mut orphaned_plugins = 0;
 
-    let paths = std::fs::read_dir(plugins_path())?;
+    let paths = std::fs::read_dir(util::plugins_path())?;
     for path in paths.filter_map(|p| p.ok()) {
         if let Some(extension) = path.path().extension() {
             // TODO: should we only check for plugin_extension here?
-            if extension.to_str().unwrap_or_default() == plugin_extension() {
+            if extension.to_str().unwrap_or_default() == util::plugin_extension() {
                 // check if the corresponding .meta file exists
                 let mut meta_file_name = path.path();
                 meta_file_name.set_extension("meta");
@@ -248,7 +244,7 @@ async fn remove_old_plugin_versions() -> Result<usize> {
 
     // get a list of pre-sorted plugins, we simply need to delete all but the first occurence of each plugin
     let mut seen = HashSet::new();
-    let plugins = local_plugins().await?;
+    let plugins = util::local_plugins().await?;
     for (meta_file_name, variant) in plugins.iter() {
         if seen.contains(&variant.descriptor.name) {
             // delete the file if we have seen a newer version already
@@ -261,37 +257,4 @@ async fn remove_old_plugin_versions() -> Result<usize> {
     }
 
     Ok(old_plugin_versions)
-}
-
-/// Returns a list of all local plugins with their .meta information attached (sorted in the same way as memflow-registry)
-async fn local_plugins() -> Result<Vec<(PathBuf, PluginVariant)>> {
-    let mut result = Vec::new();
-
-    let paths = std::fs::read_dir(plugins_path())?;
-    for path in paths.filter_map(|p| p.ok()) {
-        if let Some(extension) = path.path().extension() {
-            if extension.to_str().unwrap_or_default() == "meta" {
-                if let Ok(metadata) = serde_json::from_str::<PluginVariant>(
-                    &tokio::fs::read_to_string(path.path()).await?,
-                ) {
-                    // TODO: additionally check existence of the file name and pass it over
-                    result.push((path.path(), metadata));
-                } else {
-                    // TODO: print warning about orphaned plugin and give hints
-                    // on how to install plugins from source with memflowup
-                }
-            }
-        }
-    }
-
-    // sort by plugin_name, plugin_version and created_at
-    result.sort_by_key(|(_, variant)| {
-        (
-            variant.descriptor.name.clone(),
-            Reverse(variant.descriptor.plugin_version),
-            Reverse(variant.created_at),
-        )
-    });
-
-    Ok(result)
 }

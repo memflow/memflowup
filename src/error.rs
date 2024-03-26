@@ -5,6 +5,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// Library errors
 #[derive(thiserror::Error, Debug, Clone, PartialEq)]
+#[allow(unused)]
 pub enum Error {
     // Basic errors
     #[error("Unknown error: {0}")]
@@ -27,6 +28,8 @@ pub enum Error {
     Registry(String),
     #[error("Signature error: {0}")]
     Signature(String),
+    #[error("Zip error: {0}")]
+    Zip(String),
 }
 
 impl From<&str> for Error {
@@ -74,5 +77,17 @@ impl From<crates_io_api::Error> for Error {
 impl From<memflow_registry_client::Error> for Error {
     fn from(err: memflow_registry_client::Error) -> Self {
         Error::Registry(err.to_string())
+    }
+}
+
+impl From<reqwest::Error> for Error {
+    fn from(err: reqwest::Error) -> Self {
+        Error::Http(err.to_string())
+    }
+}
+
+impl From<zip::result::ZipError> for Error {
+    fn from(err: zip::result::ZipError) -> Self {
+        Error::Http(err.to_string())
     }
 }

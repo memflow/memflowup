@@ -1,10 +1,9 @@
-use crate::util;
-
-use std::fs;
-
-use log::{error, info};
-
+use reqwest::{Response, Url};
 use serde::{Deserialize, Serialize};
+
+use crate::error::Result;
+
+const USER_AGENT: &str = "memflowup 0.2.0";
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Release {
@@ -63,120 +62,56 @@ pub struct Commit {
     pub sha: String,
 }
 
-// TODO: filter for archicture
-#[allow(unused)]
-#[cfg(not(any(target_os = "windows", target_os = "macos")))]
-fn find_platform_asset(release: &Release) -> Option<&Asset> {
-    release.assets.iter().find(|a| a.name.contains("linux"))
-}
-
-#[cfg(target_os = "windows")]
-fn find_platform_asset<'a>(release: &'a Release) -> Option<&'a Asset> {
-    release.assets.iter().find(|a| a.name.contains("windows"))
-}
-
-#[cfg(target_os = "macos")]
-fn find_platform_asset<'a>(release: &'a Release) -> Option<&'a Asset> {
-    release.assets.iter().find(|a| a.name.contains("macos"))
-}
-
-/// Downloads a release from the specified repository.
-#[allow(unused)]
-pub fn download_repository_release_latest(group: &str, repository: &str) -> Result<String, String> {
-    let releases: Vec<Release> = util::http_get_json(&format!(
-        "https://api.github.com/repos/{}/{}/releases",
-        group, repository
-    ))?;
-
-    match releases.iter().find(|r| !r.draft && !r.prerelease) {
-        Some(release) => {
-            info!(
-                "latest stable release: {} (tag: {})",
-                release.name, release.tag_name
-            );
-            match find_platform_asset(release) {
-                Some(asset) => {
-                    info!("valid binary found for current platform: {}", asset.name);
-                    let out_file = util::tmp_file(&asset.name);
-                    download_file(&asset.browser_download_url, &out_file)?;
-                    Ok(out_file)
-                },
-                None => {
-                    Err(format!("unable to find appropiate binary for the current platform for release {}/{}/{}", group, repository, release.tag_name))
-                }
-            }
-        }
-        None => Err(format!(
-            "unable to find a release for {}/{}",
-            group, repository
-        )),
-    }
-}
-
-pub fn get_branch(url: &str, branch: &str) -> Result<Branch, &'static str> {
-    let url = format!(
+/// Resolves a specific branch from github
+pub async fn branch(url: &str, branch: &str) -> Result<Branch> {
+    let path: Url = format!(
         "{}/branches/{}",
         url.replace("github.com", "api.github.com/repos"),
         branch
-    );
+    )
+    .parse()
+    .unwrap(); // TODO: parse error
 
-    info!("Getting branch from {}", url);
-
-    util::http_get_json(&url)
+    let client = reqwest::Client::new();
+    let response = client
+        .get(path)
+        .header("User-Agent", USER_AGENT)
+        .send()
+        .await?;
+    let result = response.json::<Branch>().await?;
+    Ok(result)
 }
 
-pub fn get_tag(url: &str, tag: &str) -> Result<Tag, &'static str> {
-    let url = format!(
+/// Resolves a specific tag from github
+pub async fn tag(url: &str, tag: &str) -> Result<Tag> {
+    let path: Url = format!(
         "{}/git/ref/tags/{}",
         url.replace("github.com", "api.github.com/repos"),
         tag
-    );
+    )
+    .parse()
+    .unwrap(); // TODO: parse error
 
-    info!("Getting branch from {}", url);
-
-    util::http_get_json(&url)
+    let client = reqwest::Client::new();
+    let response = client
+        .get(path)
+        .header("User-Agent", USER_AGENT)
+        .send()
+        .await?;
+    let result = response.json::<Tag>().await?;
+    Ok(result)
 }
 
-/// Downloads the given url to the destination file
-#[allow(unused)]
-fn download_file(url: &str, file: &str) -> Result<(), String> {
-    info!("download file from '{}' to '{}'", url, file);
-    let bytes = match util::http_download_file(url) {
-        Ok(b) => b,
-        Err(err) => {
-            error!("{}", err);
-            return Err(err.into());
-        }
-    };
+/// Downloads the code for specific commit in the repository
+pub async fn download_code_for_commit(url: &str, commit: &str) -> Result<Response> {
+    let path: Url = format!("{}/archive/{}.zip", url, commit).parse().unwrap(); // TODO: parse error
 
-    match fs::write(file, bytes) {
-        Ok(()) => Ok(()),
-        Err(err) => {
-            error!("{}", err);
-            Err(err.to_string())
-        }
-    }
-}
+    let client = reqwest::Client::new();
+    let response = client
+        .get(path)
+        .header("User-Agent", USER_AGENT)
+        .send()
+        .await?;
 
-pub fn download_raw(repo: &str, branch: &str, path: &str) -> Result<Vec<u8>, &'static str> {
-    let url = format!(
-        "{}/{}/{}",
-        repo.replace("github.com", "raw.githubusercontent.com"),
-        branch,
-        path
-    );
-    info!("download raw from '{}'", url);
-
-    util::http_download_file(&url)
-}
-
-pub fn download_release_artifact(
-    repo: &str,
-    release_tag: &str,
-    artifact: &str,
-) -> Result<Vec<u8>, &'static str> {
-    let url = format!("{}/releases/download/{}/{}", repo, release_tag, artifact);
-    info!("download artifact from '{}'", url);
-
-    util::http_download_file(&url)
+    Ok(response)
 }

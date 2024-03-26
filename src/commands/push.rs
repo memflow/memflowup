@@ -40,14 +40,12 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
     let registry = matches
         .get_one::<String>("registry")
         .map(String::as_str)
-        .or_else(|| config.registry.as_deref());
-    let token = matches
-        .get_one::<String>("token")
-        .or_else(|| config.token.as_ref());
+        .or(config.registry.as_deref());
+    let token = matches.get_one::<String>("token").or(config.token.as_ref());
     let priv_key_file = matches
         .get_one::<String>("priv-key")
         .map(Path::new)
-        .or_else(|| config.priv_key_file.as_deref());
+        .or(config.priv_key_file.as_deref());
     let priv_key_file = match priv_key_file {
         Some(v) => v,
         None => {

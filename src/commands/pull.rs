@@ -2,26 +2,18 @@
 
 use std::path::Path;
 
-use bytes::BytesMut;
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use futures_util::StreamExt;
-use indicatif::{ProgressBar, ProgressStyle};
-use log::warn;
 use tokio::{fs::File, io::AsyncWriteExt};
 
 use crate::{
-    commands::plugin_file_name,
     error::{Error, Result},
+    util,
 };
 use memflow_registry_client::shared::{
     PluginUri, SignatureVerifier, MEMFLOW_DEFAULT_REGISTRY, MEMFLOW_DEFAULT_REGISTRY_VERIFYING_KEY,
 };
 
 use super::config::read_config;
-
-fn to_http_err<S: ToString>(err: S) -> Error {
-    Error::Http(err.to_string())
-}
 
 #[inline]
 pub fn metadata() -> Command {
@@ -62,11 +54,11 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
     let registry = matches
         .get_one::<String>("registry")
         .map(String::as_str)
-        .or_else(|| config.registry.as_deref());
+        .or(config.registry.as_deref());
     let pub_key_file = matches
         .get_one::<String>("pub-key")
         .map(Path::new)
-        .or_else(|| config.pub_key_file.as_deref());
+        .or(config.pub_key_file.as_deref());
 
     // TODO: support custom registry for wildcard
     if all {
@@ -84,7 +76,7 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
     } else {
         // TODO: parallel downloads
         for plugin_uri in plugin_uris.iter() {
-            if let Err(err) = pull(registry, &plugin_uri, force, pub_key_file).await {
+            if let Err(err) = pull(registry, plugin_uri, force, pub_key_file).await {
                 println!(
                     "{} Error downloading plugin {:?}: {}",
                     console::style("[X]").bold().dim().red(),
@@ -122,7 +114,7 @@ async fn pull(
     let variant = memflow_registry_client::find_by_uri(&plugin_uri, None).await?;
 
     // check if file already exists
-    let file_name = plugin_file_name(&variant);
+    let file_name = util::plugin_file_name(&variant);
     if !force && file_name.exists() {
         let bytes = tokio::fs::read(&file_name).await?;
         let digest = sha256::digest(&bytes[..]);
@@ -144,31 +136,9 @@ async fn pull(
         }
     }
 
-    // query file
+    // query file and download to memory
     let response = memflow_registry_client::download(&plugin_uri, &variant).await?;
-
-    // download the file to memory
-    let mut buffer = BytesMut::new();
-    if let Some(content_length) = response.content_length() {
-        let pb = ProgressBar::new(content_length);
-        pb.set_style(ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta})")
-                    .unwrap()
-                    .progress_chars("#>-"));
-
-        // download data in chunks to show progress
-        let mut stream = response.bytes_stream();
-        while let Some(chunk) = stream.next().await {
-            let chunk = chunk.map_err(to_http_err)?;
-            buffer.extend_from_slice(chunk.as_ref());
-            pb.inc(chunk.len() as u64);
-        }
-        pb.finish();
-    } else {
-        // no content-length set, fallback without progress bar
-        warn!("skipping progress bar because content-length is not set");
-        buffer.extend_from_slice(&response.bytes().await.map_err(to_http_err)?.to_vec()[..]);
-    }
-    let buffer = buffer.freeze();
+    let buffer = util::read_response_with_progress(response).await?;
 
     // verify file signature
     if verifier
@@ -188,7 +158,7 @@ async fn pull(
     file.flush().await?;
 
     println!(
-        "{} Downloaded plugin to: {:?}",
+        "{} Wrote plugin to: {:?}",
         console::style("[=]").bold().dim().green(),
         file_name.as_os_str(),
     );

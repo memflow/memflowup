@@ -42,7 +42,7 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
     let registry = matches
         .get_one::<String>("registry")
         .map(String::as_str)
-        .or_else(|| config.registry.as_deref());
+        .or(config.registry.as_deref());
 
     // TODO: list local + remote plugins
     // TODO: allow changing to another registry provider
@@ -63,7 +63,7 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
                         list_plugin_versions(registry, &plugin.name, 1).await?;
                     }
                 } else {
-                    println!("{0: <16} {1}", "NAME", "DESCRIPTION");
+                    println!("{0: <16} DESCRIPTION", "NAME");
                     for plugin in plugins.iter() {
                         println!("{0: <16} {1}", plugin.name, plugin.description);
                     }
@@ -75,9 +75,7 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
         Some(("remove", matches)) => {
             let config = read_config().await?;
             let plugin_digest = matches.get_one::<String>("plugin_digest").unwrap();
-            let token = matches
-                .get_one::<String>("token")
-                .or_else(|| config.token.as_ref());
+            let token = matches.get_one::<String>("token").or(config.token.as_ref());
 
             if let Err(err) =
                 memflow_registry_client::delete(registry, token.map(String::as_str), plugin_digest)
@@ -100,8 +98,8 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
 
 fn print_plugin_versions_header() {
     println!(
-        "{0: <16} {1: <16} {2: <16} {3: <16} {4: <64} {5}",
-        "NAME", "VERSION", "PLUGIN_VERSION", "DIGEST", "DIGEST_LONG", "CREATED"
+        "{0: <16} {1: <16} {2: <16} {3: <16} {4: <64} CREATED",
+        "NAME", "VERSION", "PLUGIN_VERSION", "DIGEST", "DIGEST_LONG"
     );
 }
 async fn list_plugin_versions(
@@ -122,7 +120,7 @@ async fn list_plugin_versions(
             plugin.descriptor.plugin_version,
             &plugin.digest[..7],
             plugin.digest,
-            plugin.created_at.to_string(),
+            plugin.created_at,
         );
     }
 

@@ -1,171 +1,150 @@
-use std::env;
+use std::cmp::Reverse;
 use std::fs::{self, File};
-use std::io::{self, Read};
+use std::io::{self};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::process::{Command, Output, Stdio};
 
-use log::{debug, error, info, warn};
-
-use pbr::ProgressBar;
-use progress_streams::ProgressReader;
-use serde::de::DeserializeOwned;
+use bytes::{Bytes, BytesMut};
+use futures_util::StreamExt;
+use indicatif::{ProgressBar, ProgressStyle};
+use log::{debug, info, warn};
+use memflow_registry_client::shared::PluginVariant;
+use reqwest::Response;
 use zip::ZipArchive;
 
-use crc::{Crc, CRC_64_GO_ISO};
+use crate::error::Result;
 
-const CRC: Crc<u64> = Crc::<u64>::new(&CRC_64_GO_ISO);
-
-/// Returns the path to a temporary file with the given name
-#[allow(unused)]
-pub fn tmp_file(name: &str) -> String {
-    env::temp_dir().join(name).to_string_lossy().to_string()
-}
-
-/// Queries the URL and returns the deserialized response.
-pub fn http_get_json<T: DeserializeOwned>(url: &str) -> Result<T, &'static str> {
-    let resp = ureq::get(url)
-        .call()
-        .map_err(|_| "unable to download file")?;
-
-    let mut reader = resp.into_reader();
-
-    let mut response = String::new();
-    reader
-        .read_to_string(&mut response)
-        .map_err(|_| "unable to read from http request")?;
-
-    serde_json::from_str(&response).map_err(|_| "unable to deserialize http response")
-}
-
-/// Downloads the specified file and returns a byte buffer containing the data.
-pub fn http_download_file(url: &str) -> Result<Vec<u8>, &'static str> {
-    info!("downloading file from {}", url);
-    let resp = ureq::get(url)
-        .call()
-        .map_err(|_| "unable to download file")?;
-
-    let buffer = if resp.has("Content-Length") {
-        let len = resp
-            .header("Content-Length")
-            .and_then(|s| s.parse::<usize>().ok())
-            .unwrap();
-
-        let mut reader = resp.into_reader();
-        let buffer = read_to_end(&mut reader, len)?;
-        assert_eq!(buffer.len(), len);
-        buffer
+/// Returns the path in which memflow plugins are stored.
+///
+/// On unix this is returns ~/.local/lib/memflow
+/// On windows this returns C:\Users\[Username]\Documents\memflow
+pub(crate) fn plugins_path() -> PathBuf {
+    if cfg!(unix) {
+        dirs::home_dir()
+            .unwrap()
+            .join(".local")
+            .join("lib")
+            .join("memflow")
     } else {
-        let mut buffer = Vec::new();
-        let mut reader = resp.into_reader();
-        reader
-            .read_to_end(&mut buffer)
-            .map_err(|_| "unable to read from http request")?;
-        buffer
-    };
-
-    Ok(buffer)
+        dirs::document_dir().unwrap().join("memflow")
+    }
 }
 
-pub fn read_to_end<T: Read>(reader: &mut T, len: usize) -> Result<Vec<u8>, &'static str> {
-    let mut buffer = vec![];
-
-    if len > 0 {
-        let total = Arc::new(AtomicUsize::new(0));
-        let mut reader = ProgressReader::new(reader, |progress: usize| {
-            total.fetch_add(progress, Ordering::SeqCst);
-        });
-        let mut pb = ProgressBar::new(len as u64);
-
-        let finished = Arc::new(AtomicBool::new(false));
-        let thread = {
-            let finished_thread = finished.clone();
-            let total_thread = total.clone();
-
-            std::thread::spawn(move || {
-                while !finished_thread.load(Ordering::Relaxed) {
-                    pb.set(total_thread.load(Ordering::SeqCst) as u64);
-                    std::thread::sleep(std::time::Duration::from_millis(10));
-                }
-                pb.finish();
-            })
-        };
-
-        reader
-            .read_to_end(&mut buffer)
-            .map_err(|_| "unable to read from stream")?;
-
-        finished.store(true, Ordering::Relaxed);
-        thread.join().unwrap();
+// TODO: move this to utils
+/// Returns the path in which memflowup config is stored.
+pub(crate) fn config_path() -> PathBuf {
+    if cfg!(unix) {
+        dirs::home_dir().unwrap().join(".config").join("memflowup")
     } else {
-        reader
-            .read_to_end(&mut buffer)
-            .map_err(|_| "unable to read from stream")?;
+        dirs::document_dir().unwrap()
+    }
+}
+
+/// Returns the path that points to the memflowup config.
+#[inline]
+pub(crate) fn config_file_path() -> PathBuf {
+    config_path().join("config.json")
+}
+
+/// Constructs the filename of this plugin for the current os.
+///
+/// On unix this returns libmemflow_[name]_[digest].so/.dylib
+/// On windows this returns memflow_[name]_[digest].dll
+pub(crate) fn plugin_file_name(variant: &PluginVariant) -> PathBuf {
+    let mut file_name = plugins_path();
+
+    // prepend the library name and append the file digest
+    if cfg!(unix) {
+        file_name.push(&format!(
+            "libmemflow_{}_{}",
+            variant.descriptor.name,
+            &variant.digest[..7]
+        ))
+    } else {
+        file_name.push(&format!(
+            "memflow_{}_{}",
+            variant.descriptor.name,
+            &variant.digest[..7]
+        ))
     }
 
-    Ok(buffer)
+    // append appropriate file extension
+    file_name.set_extension(plugin_extension());
+
+    file_name
 }
 
-pub fn create_dir_with_elevation(path: impl AsRef<Path>, elevate: bool) -> crate::Result<()> {
-    match std::fs::create_dir_all(&path) {
-        Ok(_) => Ok(()),
-        Err(err) => {
-            if err.kind() == std::io::ErrorKind::PermissionDenied && elevate {
-                let path_str = path
-                    .as_ref()
-                    .to_str()
-                    .ok_or("directory contains invalid characters!")?;
-                info!("Elevated mkdir {}", path_str);
-                match Command::new("sudo")
-                    .args(["mkdir", "-p", path_str])
-                    .stdout(Stdio::inherit())
-                    .stderr(Stdio::inherit())
-                    .output()
-                {
-                    Ok(_) => Ok(()),
-                    Err(err) => {
-                        error!("{}", err);
-                        Err(err.into())
-                    }
+/// Returns the plugin extension appropriate for the current os
+pub(crate) fn plugin_extension() -> &'static str {
+    #[cfg(target_os = "windows")]
+    return "dll";
+    #[cfg(target_os = "linux")]
+    return "so";
+    #[cfg(target_os = "macos")]
+    return "dylib";
+}
+
+pub async fn read_response_with_progress(response: Response) -> Result<Bytes> {
+    let mut buffer = BytesMut::new();
+    if let Some(content_length) = response.content_length() {
+        let pb = ProgressBar::new(content_length);
+        pb.set_style(ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta})")
+                    .unwrap()
+                    .progress_chars("#>-"));
+
+        // download data in chunks to show progress
+        let mut stream = response.bytes_stream();
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk?;
+            buffer.extend_from_slice(chunk.as_ref());
+            pb.inc(chunk.len() as u64);
+        }
+        pb.finish();
+    } else {
+        // no content-length set, fallback without progress bar
+        warn!("skipping progress bar because content-length is not set");
+        buffer.extend_from_slice(&response.bytes().await?.to_vec()[..]);
+    }
+    Ok(buffer.freeze())
+}
+
+/// Returns a list of all local plugins with their .meta information attached (sorted in the same way as memflow-registry)
+pub async fn local_plugins() -> Result<Vec<(PathBuf, PluginVariant)>> {
+    let mut result = Vec::new();
+
+    let paths = std::fs::read_dir(plugins_path())?;
+    for path in paths.filter_map(|p| p.ok()) {
+        if let Some(extension) = path.path().extension() {
+            if extension.to_str().unwrap_or_default() == "meta" {
+                if let Ok(metadata) = serde_json::from_str::<PluginVariant>(
+                    &tokio::fs::read_to_string(path.path()).await?,
+                ) {
+                    // TODO: additionally check existence of the file name and pass it over
+                    result.push((path.path(), metadata));
+                } else {
+                    // TODO: print warning about orphaned plugin and give hints
+                    // on how to install plugins from source with memflowup
                 }
-            } else {
-                Err(err.into())
             }
         }
     }
+
+    // sort by plugin_name, plugin_version and created_at
+    result.sort_by_key(|(_, variant)| {
+        (
+            variant.descriptor.name.clone(),
+            Reverse(variant.descriptor.plugin_version),
+            Reverse(variant.created_at),
+        )
+    });
+
+    Ok(result)
 }
 
-pub fn write_with_elevation(
-    path: impl AsRef<Path>,
-    elevate: bool,
-    handler: impl Fn(std::fs::File) -> Result<(), Box<dyn std::error::Error>>,
-) -> Result<(), Box<dyn std::error::Error>> {
-    match std::fs::File::create(&path) {
-        Ok(file) => handler(file),
-        Err(err) => {
-            if err.kind() == std::io::ErrorKind::PermissionDenied && elevate {
-                let dir = make_temp_dir("memflowup_build", &[&path.as_ref().to_string_lossy()])?;
-                let tmp_path = dir.join("tmp_file");
-                let file = std::fs::File::create(&tmp_path)?;
-                handler(file)?;
-                copy_file(&tmp_path, &path, true).map_err(Into::into)
-            } else {
-                Err(err.into())
-            }
-        }
-    }
-}
-
-pub fn zip_unpack(in_buf: &[u8], out_dir: &Path, strip_path: i64) -> Result<(), String> {
+/// Unpack zip archive in memory
+pub fn zip_unpack(in_buf: &[u8], out_dir: &Path, strip_path: i64) -> crate::Result<()> {
     let zip_cursor = std::io::Cursor::new(in_buf);
-    let mut zip_archive = match ZipArchive::new(zip_cursor) {
-        Ok(archive) => archive,
-        Err(err) => {
-            error!("{:?}", err);
-            return Err(format!("{:?}", err));
-        }
-    };
+    let mut zip_archive = ZipArchive::new(zip_cursor)?;
 
     for i in 0..zip_archive.len() {
         if let Ok(mut file) = zip_archive.by_index(i) {
@@ -211,144 +190,28 @@ pub fn zip_unpack(in_buf: &[u8], out_dir: &Path, strip_path: i64) -> Result<(), 
     Ok(())
 }
 
-/// Copies a file from 'from' to 'to'
-pub fn copy_file(
-    from: &impl AsRef<Path>,
-    to: &impl AsRef<Path>,
-    elevate_if_needed: bool,
-) -> Result<(), std::io::Error> {
-    info!(
-        "copying '{:?}' to '{:?}'",
-        from.as_ref().to_string_lossy(),
-        to.as_ref().to_string_lossy(),
-    );
+/// Executes cargo with the given flags
+pub fn cargo<P: AsRef<Path>>(args: &str, pwd: P) -> Result<Output> {
+    log::info!("executing 'cargo {}' in {:?}", args, pwd.as_ref());
+    let mut cmd = Command::new("cargo");
 
-    match std::fs::copy(from, to) {
-        Ok(_) => Ok(()),
-        Err(err) => {
-            if err.kind() == std::io::ErrorKind::PermissionDenied && elevate_if_needed {
-                info!(
-                    "Elevated copy {} to {}",
-                    from.as_ref().to_string_lossy(),
-                    to.as_ref().to_string_lossy()
-                );
-                match Command::new("sudo")
-                    .arg("cp")
-                    .arg(from.as_ref().to_str().ok_or_else(|| {
-                        std::io::Error::new(err.kind(), "from path contains invalid characters!")
-                    })?)
-                    .arg(to.as_ref().to_str().ok_or_else(|| {
-                        std::io::Error::new(err.kind(), "to path contains invalid characters!")
-                    })?)
-                    .stdout(Stdio::inherit())
-                    .stderr(Stdio::inherit())
-                    .output()
-                {
-                    Ok(_) => return Ok(()),
-                    Err(err) => {
-                        error!("{}", err);
-                    }
-                };
-            }
-            error!("{}", &err);
-            Err(err)
-        }
+    cmd.current_dir(pwd)
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit());
+
+    for arg in args.split(' ') {
+        cmd.arg(arg);
     }
-}
 
-pub fn mark_executable(
-    path: &impl AsRef<Path>,
-    elevate_if_needed: bool,
-) -> Result<(), std::io::Error> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = std::fs::metadata(path)?.permissions();
-        perms.set_mode((perms.mode() | 0o111) & !0o022);
-
-        if let Err(err) = std::fs::set_permissions(path, perms) {
-            if err.kind() == std::io::ErrorKind::PermissionDenied && elevate_if_needed {
-                info!("Elevated chmod {}", path.as_ref().to_string_lossy(),);
-                match Command::new("sudo")
-                    .arg("chmod")
-                    .arg("a+x")
-                    .arg(path.as_ref().to_str().ok_or_else(|| {
-                        std::io::Error::new(err.kind(), "from path contains invalid characters!")
-                    })?)
-                    .stdout(Stdio::inherit())
-                    .stderr(Stdio::inherit())
-                    .output()
-                {
-                    Ok(_) => return Ok(()),
-                    Err(err) => {
-                        error!("{}", err);
-                    }
-                };
-            }
-            error!("{}", &err);
-            return Err(err);
-        }
-    }
-    Ok(())
-}
-
-pub fn config_dir(system_wide: bool) -> PathBuf {
-    if system_wide {
-        #[cfg(not(windows))]
-        {
-            "/etc/memflowup/".into()
-        }
-        #[cfg(windows)]
-        // TODO: pick a better path
-        {
-            "C:\\memflowup\\{}".into()
-        }
-    } else {
-        let mut path = dirs::config_dir().unwrap();
-        path.push("memflowup");
-        path
-    }
-}
-
-#[allow(unused)]
-pub fn executable_dir(system_wide: bool) -> PathBuf {
-    if system_wide {
-        #[cfg(not(windows))]
-        {
-            "/usr/local/bin/".into()
-        }
-        #[cfg(windows)]
-        // TODO: pick a better path
-        {
-            "C:\\memflowup\\{}".into()
-        }
-    } else {
-        #[cfg(not(windows))]
-        {
-            let mut path = dirs::executable_dir().unwrap();
-            path.push("memflowup");
-            path
-        }
-        #[cfg(windows)]
-        {
-            panic!("windows does not have a non system-wide program directory")
-        }
-    }
+    let output = cmd.output()?;
+    Ok(output)
 }
 
 /// Create a temporary directory, but it can already be an existing one.
-pub fn make_temp_dir(subdir: &str, names: &[&str]) -> Result<TempDir, std::io::Error> {
+pub async fn create_temp_dir(subdir: &str, uid: &str) -> crate::Result<TempDir> {
     let tmp_dir = std::env::temp_dir();
-
-    let mut digest = CRC.digest();
-
-    for n in names {
-        digest.update(n.as_bytes());
-    }
-
-    let tmp_path = tmp_dir.join(format!("{}/{}", subdir, digest.finalize()));
-    std::fs::create_dir_all(&tmp_path)?;
-
+    let tmp_path = tmp_dir.join(format!("{}/{}", subdir, uid));
+    tokio::fs::create_dir_all(&tmp_path).await?;
     Ok(TempDir(tmp_path))
 }
 

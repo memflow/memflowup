@@ -13,28 +13,27 @@ keywords = [ "memflow", "introspection", "memflowup", "memory", "dma" ]
 categories = [ "memory-management", "os" ]
 
 [dependencies]
-log = "^0.4.14"
-simplelog = "^0.12.0"
-rhai = "^1.6"
-clap = { version = "^4.0.11", features = ["cargo"] }
+# general dependencies
+log = "0.4"
+env_logger = "0.11"
+thiserror = "1.0"
+clap = { version = "4.5", features = ["cargo"] }
+console = "0.15"
 inquire = "0.7"
 
-# scripts
-which = "4.0.2"
-ureq = "^2.4"
-pbr = "1.0"
-progress-streams = "1.1"
-dirs = "^4.0"
-zip = "^0.6"
-crc = "^3.0"
-
-# memflowup 0.2
-thiserror = "1.0"
+# async runtime
 tokio = { version = "1.36.0", features = ["macros", "rt-multi-thread", "fs", "signal"] }
+bytes = "1.6"
+
+# serializing
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-console = "0.15"
-bytes = "1.6"
+
+# memflowup dirs
+dirs = "5.0"
+
+# ensure_rust checks
+which = "6.0"
 
 # update check
 crates_io_api = { version = "0.9.0", default-features = false, features = ["rustls"] }
@@ -43,9 +42,15 @@ crates_io_api = { version = "0.9.0", default-features = false, features = ["rust
 memflow-registry-client = { path = "../memflow-registry/memflow-registry-client" }
 sha256 = "1.5"
 
+# source builds
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream"] }
+zip = "0.6"
+chrono = { version = "0.4", features = ["serde"] }
+
 # download progress
 futures-util = "0.3"
 indicatif = "0.17"
 
 [target.'cfg(target_os = "linux")'.dependencies]
+# root check
 libc = "0.2"

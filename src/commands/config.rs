@@ -8,9 +8,10 @@ use memflow_registry_client::shared::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::error::{Error, Result};
-
-use super::config_file_path;
+use crate::{
+    error::{Error, Result},
+    util,
+};
 
 pub const CONFIG_KEYS: [&str; 4] = ["registry", "token", "pub_key_file", "priv_key_file"];
 
@@ -195,7 +196,7 @@ async fn ensure_config_file_path() -> Result<()> {
     }
 
     // create file
-    let path = config_file_path();
+    let path = util::config_file_path();
     if !path.exists() {
         tokio::fs::write(path, b"{}").await?;
     }
@@ -205,7 +206,7 @@ async fn ensure_config_file_path() -> Result<()> {
 
 pub async fn read_config() -> Result<Config> {
     ensure_config_file_path().await?;
-    let content = tokio::fs::read_to_string(config_file_path()).await?;
+    let content = tokio::fs::read_to_string(util::config_file_path()).await?;
     let config: Config = serde_json::from_str(&content)?;
     Ok(config)
 }
@@ -213,5 +214,5 @@ pub async fn read_config() -> Result<Config> {
 pub async fn write_config(config: Config) -> Result<()> {
     ensure_config_file_path().await?;
     let content = serde_json::to_string(&config)?;
-    Ok(tokio::fs::write(config_file_path(), content.as_bytes()).await?)
+    Ok(tokio::fs::write(util::config_file_path(), content.as_bytes()).await?)
 }
