@@ -49,7 +49,7 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
     match matches.subcommand() {
         Some(("list", matches)) => {
             if let Some(plugin_name) = matches.get_one::<String>("plugin_name") {
-                print_plugin_versions_header();
+                super::print_plugin_versions_header();
                 list_plugin_versions(registry, plugin_name, 50).await?;
             } else {
                 let versions = matches.get_flag("versions");
@@ -58,7 +58,7 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
                 let plugins = memflow_registry_client::plugins(registry).await?;
                 if versions {
                     // TODO: display plugins that do not have a version for our current os?
-                    print_plugin_versions_header();
+                    super::print_plugin_versions_header();
                     for plugin in plugins.iter() {
                         list_plugin_versions(registry, &plugin.name, 1).await?;
                     }
@@ -96,12 +96,6 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
     }
 }
 
-fn print_plugin_versions_header() {
-    println!(
-        "{0: <16} {1: <16} {2: <16} {3: <16} {4: <64} CREATED",
-        "NAME", "VERSION", "PLUGIN_VERSION", "DIGEST", "DIGEST_LONG"
-    );
-}
 async fn list_plugin_versions(
     registry: Option<&str>,
     plugin_name: &str,
@@ -114,7 +108,7 @@ async fn list_plugin_versions(
 
     for plugin in plugins.iter() {
         println!(
-            "{0: <16} {1: <16} {2: <16} {3: <16} {4: <64} {5}",
+            "{0: <16} {1: <16} {2: <16} {3: <8} {4: <65} {5:}",
             plugin_name,
             plugin.descriptor.version,
             plugin.descriptor.plugin_version,
