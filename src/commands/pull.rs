@@ -1,3 +1,7 @@
+//! Clap subcommand to pull plugins from a registry
+
+use std::path::Path;
+
 use bytes::BytesMut;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use futures_util::StreamExt;
@@ -10,8 +14,10 @@ use crate::{
     error::{Error, Result},
 };
 use memflow_registry_client::shared::{
-    PluginUri, SignatureVerifier, MEMFLOW_DEFAULT_REGISTRY_VERIFYING_KEY,
+    PluginUri, SignatureVerifier, MEMFLOW_DEFAULT_REGISTRY, MEMFLOW_DEFAULT_REGISTRY_VERIFYING_KEY,
 };
+
+use super::config::read_config;
 
 fn to_http_err<S: ToString>(err: S) -> Error {
     Error::Http(err.to_string())
@@ -31,7 +37,12 @@ pub fn metadata() -> Command {
             .long("force")
             .help("forces download of the plugin even if it is already installed")
             .action(ArgAction::SetTrue),
-        Arg::new("pub-key")
+        Arg::new("registry")
+            .short('r')
+            .long("registry")
+            .help("pulls the plugin from a custom registry")
+            .action(ArgAction::Set),
+            Arg::new("pub-key")
             .short('p')
             .long("pub-key")
             .help("the public key used to verify the binary signature (this is required for self-hosted registries)")
@@ -40,6 +51,7 @@ pub fn metadata() -> Command {
 }
 
 pub async fn handle(matches: &ArgMatches) -> Result<()> {
+    let config = read_config().await?;
     let plugin_uris = matches
         .get_many::<String>("plugin_uri")
         .unwrap_or_default()
@@ -47,13 +59,20 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
         .collect::<Vec<_>>();
     let all = matches.get_flag("all");
     let force = matches.get_flag("force");
-    let pub_key = matches.get_one::<String>("pub-key");
+    let registry = matches
+        .get_one::<String>("registry")
+        .map(String::as_str)
+        .or_else(|| config.registry.as_deref());
+    let pub_key_file = matches
+        .get_one::<String>("pub-key")
+        .map(Path::new)
+        .or_else(|| config.pub_key_file.as_deref());
 
     // TODO: support custom registry for wildcard
     if all {
         let plugins = memflow_registry_client::plugins(None).await?;
         for plugin in plugins.iter() {
-            if let Err(err) = pull(&plugin.name, force, pub_key.map(String::as_str)).await {
+            if let Err(err) = pull(registry, &plugin.name, force, pub_key_file).await {
                 println!(
                     "{} Error downloading plugin {:?}: {}",
                     console::style("[X]").bold().dim().red(),
@@ -65,7 +84,7 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
     } else {
         // TODO: parallel downloads
         for plugin_uri in plugin_uris.iter() {
-            if let Err(err) = pull(&plugin_uri, force, pub_key.map(String::as_str)).await {
+            if let Err(err) = pull(registry, &plugin_uri, force, pub_key_file).await {
                 println!(
                     "{} Error downloading plugin {:?}: {}",
                     console::style("[X]").bold().dim().red(),
@@ -79,7 +98,12 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
     Ok(())
 }
 
-async fn pull(plugin_uri: &str, force: bool, pub_key: Option<&str>) -> Result<()> {
+async fn pull(
+    registry: Option<&str>,
+    plugin_uri: &str,
+    force: bool,
+    pub_key: Option<&Path>,
+) -> Result<()> {
     // load the signature verifier
     let verifier = if let Some(pub_key) = pub_key {
         // load custom public key
@@ -90,7 +114,11 @@ async fn pull(plugin_uri: &str, force: bool, pub_key: Option<&str>) -> Result<()
     }?;
 
     // find the correct plugin variant based on the input arguments
-    let plugin_uri: PluginUri = plugin_uri.parse()?;
+    let plugin_uri = PluginUri::with_defaults(
+        plugin_uri,
+        registry.unwrap_or(MEMFLOW_DEFAULT_REGISTRY),
+        "latest",
+    )?;
     let variant = memflow_registry_client::find_by_uri(&plugin_uri, None).await?;
 
     // check if file already exists

@@ -1,7 +1,10 @@
+//! Clap subcommand to query the registry
+
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use memflow_registry_client::shared::MEMFLOW_DEFAULT_REGISTRY;
 
 use crate::error::Result;
+
+use super::config::read_config;
 
 #[inline]
 pub fn metadata() -> Command {
@@ -19,12 +22,15 @@ pub fn metadata() -> Command {
             .short('r')
             .long("registry")
             .help("pushes the plugin to a custom registry")
-            .default_value(MEMFLOW_DEFAULT_REGISTRY)
             .action(ArgAction::Set)])
 }
 
 pub async fn handle(matches: &ArgMatches) -> Result<()> {
-    let registry = matches.get_one::<String>("registry").unwrap();
+    let config = read_config().await?;
+    let registry = matches
+        .get_one::<String>("registry")
+        .map(String::as_str)
+        .or_else(|| config.registry.as_deref());
 
     // TODO: list local + remote plugins
     // TODO: allow changing to another registry provider
@@ -32,17 +38,17 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
         Some(("list", matches)) => {
             if let Some(plugin_name) = matches.get_one::<String>("plugin_name") {
                 print_plugin_versions_header();
-                list_plugin_versions(Some(registry), plugin_name, 50).await?;
+                list_plugin_versions(registry, plugin_name, 50).await?;
             } else {
                 let versions = matches.get_flag("versions");
 
                 // list all plugins
-                let plugins = memflow_registry_client::plugins(Some(registry)).await?;
+                let plugins = memflow_registry_client::plugins(registry).await?;
                 if versions {
                     // TODO: display plugins that do not have a version for our current os?
                     print_plugin_versions_header();
                     for plugin in plugins.iter() {
-                        list_plugin_versions(Some(registry), &plugin.name, 1).await?;
+                        list_plugin_versions(registry, &plugin.name, 1).await?;
                     }
                 } else {
                     println!("{0: <16} {1}", "NAME", "DESCRIPTION");

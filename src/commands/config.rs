@@ -1,54 +1,117 @@
 //! Clap subcommand to configure memflowup
 
-use std::{cmp::Reverse, collections::HashMap, path::PathBuf};
+use std::path::{Path, PathBuf};
 
-use chrono::{DateTime, Utc};
-use clap::{Arg, ArgAction, ArgMatches, Command};
-use memflow_registry_client::shared::{PluginUri, PluginVariant};
+use clap::{Arg, ArgMatches, Command};
+use memflow_registry_client::shared::{
+    SignatureGenerator, SignatureVerifier, MEMFLOW_DEFAULT_REGISTRY,
+};
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    commands::{plugin_extension, plugins_path},
-    error::{Error, Result},
-};
+use crate::error::{Error, Result};
 
 use super::config_file_path;
 
-pub const CONFIG_KEYS: [&str; 3] = ["registry", "token", "priv_key_file"];
+// TODO: store fullpath for files, special check if those files can be read
+// TODO: handle those special cases in get/set function in Config impl
+pub const CONFIG_KEYS: [&str; 4] = ["registry", "token", "pub_key_file", "priv_key_file"];
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(transparent)]
 pub struct Config {
-    entries: HashMap<String, String>,
+    pub registry: Option<String>,
+    pub token: Option<String>,
+    pub pub_key_file: Option<PathBuf>,
+    pub priv_key_file: Option<PathBuf>,
 }
 
 impl Config {
     #[inline]
     pub fn get(&self, key: &str) -> Result<Option<&str>> {
-        if CONFIG_KEYS.iter().any(|&k| k == key) {
-            Ok(self.entries.get(key).map(String::as_str))
-        } else {
-            Err(Error::NotFound(format!("option `{}` is invalid", key)))
+        // refactor file handling: https://internals.rust-lang.org/t/pre-rfc-filter-map-for-option/8932
+        match key {
+            "registry" => Ok(Some(
+                self.registry.as_deref().unwrap_or(MEMFLOW_DEFAULT_REGISTRY),
+            )),
+            "token" => Ok(self.token.as_deref()),
+            "pub_key_file" => Ok(self
+                .pub_key_file
+                .as_ref()
+                .map(|p| p.as_os_str().to_str().unwrap())),
+            "priv_key_file" => Ok(self
+                .priv_key_file
+                .as_ref()
+                .map(|p| p.as_os_str().to_str().unwrap())),
+            _ => Err(Error::NotFound(format!("option `{}` is invalid", key))),
         }
     }
 
     #[inline]
     pub fn set(&mut self, key: &str, value: &str) -> Result<()> {
-        if CONFIG_KEYS.iter().any(|&k| k == key) {
-            self.entries.insert(key.to_owned(), value.to_owned());
-            Ok(())
-        } else {
-            Err(Error::NotFound(format!("option `{}` is invalid", key)))
+        match key {
+            "registry" => {
+                self.registry = Some(value.to_owned());
+                Ok(())
+            }
+            "token" => {
+                self.token = Some(value.to_owned());
+                Ok(())
+            }
+            "pub_key_file" => {
+                let path = Path::new(value);
+                if path.exists() {
+                    match SignatureVerifier::new(path) {
+                        Ok(_) => {
+                            self.pub_key_file = path.canonicalize().ok();
+                            Ok(())
+                        }
+                        Err(_) => Err(Error::NotFound(
+                            "File is not a valid public key file".to_owned(),
+                        )),
+                    }
+                } else {
+                    Err(Error::NotFound("Key file does not exist".to_owned()))
+                }
+            }
+            "priv_key_file" => {
+                let path = Path::new(value);
+                if path.exists() {
+                    match SignatureGenerator::new(path) {
+                        Ok(_) => {
+                            self.priv_key_file = path.canonicalize().ok();
+                            Ok(())
+                        }
+                        Err(_) => Err(Error::NotFound(
+                            "File is not a valid private key file".to_owned(),
+                        )),
+                    }
+                } else {
+                    Err(Error::NotFound("Key file does not exist".to_owned()))
+                }
+            }
+            _ => Err(Error::NotFound(format!("option `{}` is invalid", key))),
         }
     }
 
     #[inline]
     pub fn unset(&mut self, key: &str) -> Result<()> {
-        if CONFIG_KEYS.iter().any(|&k| k == key) {
-            let _ = self.entries.remove(key);
-            Ok(())
-        } else {
-            Err(Error::NotFound(format!("option `{}` is invalid", key)))
+        match key {
+            "registry" => {
+                self.registry = None;
+                Ok(())
+            }
+            "token" => {
+                self.token = None;
+                Ok(())
+            }
+            "pub_key_file" => {
+                self.pub_key_file = None;
+                Ok(())
+            }
+            "priv_key_file" => {
+                self.priv_key_file = None;
+                Ok(())
+            }
+            _ => Err(Error::NotFound(format!("option `{}` is invalid", key))),
         }
     }
 }
@@ -84,9 +147,16 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
                     _ => (),
                 }
             } else {
-                for (key, value) in config.entries.iter() {
-                    println!("{} = {}", key, value);
-                }
+                println!("registry = {}", config.registry.unwrap_or_default());
+                println!("token = {}", config.token.unwrap_or_default());
+                println!(
+                    "pub_key_file = {:?}",
+                    config.pub_key_file.unwrap_or_default()
+                );
+                println!(
+                    "priv_key_file = {:?}",
+                    config.priv_key_file.unwrap_or_default()
+                );
             }
             Ok(())
         }
@@ -96,12 +166,12 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
 
             let mut config = read_config().await?;
 
-            if let Err(_) = config.set(key, value) {
+            if let Err(err) = config.set(key, value) {
                 println!(
-                    "{} Config option `{}` does not exist. Valid options are: {}",
+                    "{} Error setting config option `{}`: {}",
                     console::style("[X]").bold().dim().red(),
                     key,
-                    CONFIG_KEYS.join(", ")
+                    err
                 );
             }
 
@@ -150,14 +220,14 @@ async fn ensure_config_file_path() -> Result<()> {
     Ok(())
 }
 
-async fn read_config() -> Result<Config> {
+pub async fn read_config() -> Result<Config> {
     ensure_config_file_path().await?;
     let content = tokio::fs::read_to_string(config_file_path()).await?;
     let config: Config = serde_json::from_str(&content)?;
     Ok(config)
 }
 
-async fn write_config(config: Config) -> Result<()> {
+pub async fn write_config(config: Config) -> Result<()> {
     ensure_config_file_path().await?;
     let content = serde_json::to_string(&config)?;
     Ok(tokio::fs::write(config_file_path(), content.as_bytes()).await?)

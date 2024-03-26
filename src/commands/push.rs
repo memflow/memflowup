@@ -1,7 +1,13 @@
-use clap::{Arg, ArgAction, ArgMatches, Command};
-use memflow_registry_client::shared::{SignatureGenerator, MEMFLOW_DEFAULT_REGISTRY};
+//! Clap subcommand to push plugins in a registry
 
-use crate::error::Result;
+use std::path::Path;
+
+use clap::{Arg, ArgAction, ArgMatches, Command};
+use memflow_registry_client::shared::SignatureGenerator;
+
+use crate::error::{Error, Result};
+
+use super::config::read_config;
 
 #[inline]
 pub fn metadata() -> Command {
@@ -14,7 +20,6 @@ pub fn metadata() -> Command {
             .short('r')
             .long("registry")
             .help("pushes the plugin to a custom registry")
-            .default_value(MEMFLOW_DEFAULT_REGISTRY)
             .action(ArgAction::Set),
         Arg::new("token")
             .short('t')
@@ -25,22 +30,40 @@ pub fn metadata() -> Command {
             .short('p')
             .long("priv-key")
             .help("the private key used to sign the binary")
-            .required(true)
             .action(ArgAction::Set),
     ])
 }
 
 pub async fn handle(matches: &ArgMatches) -> Result<()> {
+    let config = read_config().await?;
     let file_name = matches.get_one::<String>("file_name").unwrap();
-    let registry = matches.get_one::<String>("registry").unwrap();
-    let token = matches.get_one::<String>("token");
-    let priv_key = matches.get_one::<String>("priv-key").unwrap();
+    let registry = matches
+        .get_one::<String>("registry")
+        .map(String::as_str)
+        .or_else(|| config.registry.as_deref());
+    let token = matches
+        .get_one::<String>("token")
+        .or_else(|| config.token.as_ref());
+    let priv_key_file = matches
+        .get_one::<String>("priv-key")
+        .map(Path::new)
+        .or_else(|| config.priv_key_file.as_deref());
+    let priv_key_file = match priv_key_file {
+        Some(v) => v,
+        None => {
+            println!(
+                "{} Private key file is required for signing. Either configure it via `memflowup config` or the `--priv-key` argument",
+                console::style("[X]").bold().dim().red(),
+            );
+            return Err(Error::NotFound("private key file not found".to_owned()));
+        }
+    };
 
     // TODO: upload progress
 
-    let mut generator = SignatureGenerator::new(priv_key)?;
+    let mut generator = SignatureGenerator::new(priv_key_file)?;
     match memflow_registry_client::upload(
-        Some(registry),
+        registry,
         token.map(String::as_str),
         file_name,
         &mut generator,
