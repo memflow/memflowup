@@ -144,12 +144,6 @@ async fn pull(
         }
     }
 
-    println!(
-        "{} Downloading plugin: {:?}",
-        console::style("[-]").bold().dim(),
-        file_name.file_name().unwrap()
-    );
-
     // query file
     let response = memflow_registry_client::download(&plugin_uri, &variant).await?;
 
