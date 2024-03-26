@@ -16,7 +16,9 @@ pub fn metadata() -> Command {
     Command::new("plugins")
         .subcommand_required(true)
         .subcommands([
-            Command::new("list").alias("ls"),
+            Command::new("list")
+                .alias("ls")
+                .args([Arg::new("plugin_name").action(ArgAction::Set)]),
             Command::new("purge"),
             Command::new("remove")
                 .alias("rm")
@@ -26,7 +28,9 @@ pub fn metadata() -> Command {
 
 pub async fn handle(matches: &ArgMatches) -> Result<()> {
     match matches.subcommand() {
-        Some(("list", _)) => list_local_plugins().await,
+        Some(("list", matches)) => {
+            list_local_plugins(matches.get_one::<String>("plugin_name").map(String::as_str)).await
+        }
         Some(("remove", matches)) => {
             let plugin_uris = matches
                 .get_many::<String>("plugin_uri")
@@ -55,7 +59,7 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
     }
 }
 
-async fn list_local_plugins() -> Result<()> {
+async fn list_local_plugins(plugin_name: Option<&str>) -> Result<()> {
     // identical to print_plugin_versions_header() // TODO: restructure
     println!(
         "{0: <16} {1: <16} {2: <16} {3: <16} {4: <32} {5}",
@@ -63,6 +67,13 @@ async fn list_local_plugins() -> Result<()> {
     );
     let plugins = local_plugins().await?;
     for (file_name, variant) in plugins.into_iter() {
+        // optionally filter by plugin name
+        if let Some(plugin_name) = plugin_name {
+            if variant.descriptor.name != plugin_name {
+                continue;
+            }
+        }
+
         let file_metadata = std::fs::metadata(file_name)?;
         let datetime: DateTime<Utc> = file_metadata.created()?.into();
         println!(
@@ -245,7 +256,7 @@ async fn local_plugins() -> Result<Vec<(PathBuf, PluginVariant)>> {
     result.sort_by_key(|(_, variant)| {
         (
             variant.descriptor.name.clone(),
-            Reverse(variant.descriptor.version.clone()),
+            Reverse(variant.descriptor.plugin_version),
             Reverse(variant.created_at),
         )
     });
