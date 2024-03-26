@@ -9,7 +9,9 @@ use crate::{
     commands::plugin_file_name,
     error::{Error, Result},
 };
-use memflow_registry_client::shared::{PluginUri, SignatureVerifier};
+use memflow_registry_client::shared::{
+    PluginUri, SignatureVerifier, MEMFLOW_DEFAULT_REGISTRY_VERIFYING_KEY,
+};
 
 fn to_http_err<S: ToString>(err: S) -> Error {
     Error::Http(err.to_string())
@@ -84,7 +86,7 @@ async fn pull(plugin_uri: &str, force: bool, pub_key: Option<&str>) -> Result<()
         SignatureVerifier::new(pub_key)
     } else {
         // use default bundled public key
-        SignatureVerifier::with_str(include_str!("../../default_verifying_key.pem"))
+        SignatureVerifier::with_str(MEMFLOW_DEFAULT_REGISTRY_VERIFYING_KEY)
     }?;
 
     // find the correct plugin variant based on the input arguments

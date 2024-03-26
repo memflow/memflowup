@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use clap::Command;
 use memflow_registry_client::shared::PluginVariant;
 
+pub mod config;
 pub mod plugins;
 pub mod pull;
 pub mod push;
@@ -11,6 +12,7 @@ pub mod registry;
 #[inline]
 pub fn metadata() -> Vec<Command> {
     vec![
+        config::metadata(),
         plugins::metadata(),
         pull::metadata(),
         push::metadata(),
@@ -33,6 +35,22 @@ pub(crate) fn plugins_path() -> PathBuf {
     } else {
         dirs::document_dir().unwrap().join("memflow")
     }
+}
+
+// TODO: move this to utils
+/// Returns the path in which memflowup config is stored.
+pub(crate) fn config_path() -> PathBuf {
+    if cfg!(unix) {
+        dirs::home_dir().unwrap().join(".config").join("memflowup")
+    } else {
+        dirs::document_dir().unwrap()
+    }
+}
+
+/// Returns the path that points to the memflowup config.
+#[inline]
+pub(crate) fn config_file_path() -> PathBuf {
+    config_path().join("config.json")
 }
 
 /// Constructs the filename of this plugin for the current os.
