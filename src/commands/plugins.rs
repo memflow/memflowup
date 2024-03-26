@@ -2,6 +2,7 @@
 
 use std::{
     cmp::Reverse,
+    collections::HashSet,
     path::{Path, PathBuf},
 };
 
@@ -22,7 +23,7 @@ pub fn metadata() -> Command {
             Command::new("list")
                 .alias("ls")
                 .args([Arg::new("plugin_name").action(ArgAction::Set)]),
-            Command::new("purge"),
+            Command::new("clean").alias("purge"),
             Command::new("remove")
                 .alias("rm")
                 .args([Arg::new("plugin_uri").action(ArgAction::Append)]),
@@ -47,14 +48,13 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
 
             Ok(())
         }
-        Some(("purge", _)) => {
-            // TODO: find and clean all files that have no .meta file
-            // TODO: allow purging of everything
+        Some(("clean", _)) => {
             let orphaned = remove_orphaned_plugins().await?;
+            let old_versions = remove_old_plugin_versions().await?;
             println!(
                 "{} Plugins purged, removed {} plugins.",
                 console::style("[=]").bold().dim().green(),
-                orphaned,
+                orphaned + old_versions,
             );
             Ok(())
         }
@@ -244,6 +244,27 @@ async fn remove_orphaned_plugins() -> Result<usize> {
     }
 
     Ok(orphaned_plugins)
+}
+
+/// Removes all plugins which do not have a proper .meta file associated with them.
+async fn remove_old_plugin_versions() -> Result<usize> {
+    let mut old_plugin_versions = 0;
+
+    // get a list of pre-sorted plugins, we simply need to delete all but the first occurence of each plugin
+    let mut seen = HashSet::new();
+    let plugins = local_plugins().await?;
+    for (meta_file_name, variant) in plugins.iter() {
+        if seen.contains(&variant.descriptor.name) {
+            // delete the file if we have seen a newer version already
+            remove_local_plugin_file(meta_file_name).await?;
+            old_plugin_versions += 1;
+        } else {
+            // add the file to our "seen" list
+            seen.insert(variant.descriptor.name.clone());
+        }
+    }
+
+    Ok(old_plugin_versions)
 }
 
 /// Returns a list of all local plugins with their .meta information attached (sorted in the same way as memflow-registry)
