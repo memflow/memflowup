@@ -91,7 +91,7 @@ async fn pull(plugin_uri: &str, force: bool, pub_key: Option<&str>) -> Result<()
 
     // find the correct plugin variant based on the input arguments
     let plugin_uri: PluginUri = plugin_uri.parse()?;
-    let variant = memflow_registry_client::find_by_uri(&plugin_uri).await?;
+    let variant = memflow_registry_client::find_by_uri(&plugin_uri, None).await?;
 
     // check if file already exists
     let file_name = plugin_file_name(&variant);

@@ -21,8 +21,8 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
         Some(("list", _)) => {
             // identical to print_plugin_versions_header() // TODO: restructure
             println!(
-                "{0: <16} {1: <16} {2: <16} {3: <32} {4}",
-                "NAME", "VERSION", "DIGEST", "CREATED", "DOWNLOADED"
+                "{0: <16} {1: <16} {2: <16} {3: <16} {4: <32} {5}",
+                "NAME", "VERSION", "PLUGIN_VERSION", "DIGEST", "CREATED", "DOWNLOADED"
             );
             let paths = std::fs::read_dir(plugins_path())?;
             for path in paths.filter_map(|p| p.ok()) {
@@ -34,9 +34,10 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
                             let file_metadata = tokio::fs::metadata(path.path()).await?;
                             let datetime: DateTime<Utc> = file_metadata.created()?.into();
                             println!(
-                                "{0: <16} {1: <16} {2: <16} {3: <32} {4:}",
+                                "{0: <16} {1: <16} {2: <16} {3: <16} {4: <32} {5:}",
                                 metadata.descriptor.name,
                                 metadata.descriptor.version,
+                                metadata.descriptor.plugin_version,
                                 &metadata.digest[..7],
                                 metadata.created_at.to_string(),
                                 datetime.naive_utc().to_string(),
@@ -114,13 +115,16 @@ async fn remove_orphaned_plugins() -> Result<usize> {
                     // try to remove meta file (this is allowed to fail)
                     let mut meta_file_name = path.path();
                     meta_file_name.set_extension("meta");
-                    if let Err(err) = tokio::fs::remove_file(meta_file_name).await {
-                        println!(
-                            "{} Unable to delete .meta file for plugin {:?}: {}",
-                            console::style("[X]").bold().dim().red(),
-                            path.path().file_name().unwrap_or_default().to_os_string(),
-                            err
-                        );
+                    if meta_file_name.exists() {
+                        // only try to delete the file if it exists, so we do not print an error in all cases
+                        if let Err(err) = tokio::fs::remove_file(meta_file_name).await {
+                            println!(
+                                "{} Unable to delete .meta file for plugin {:?}: {}",
+                                console::style("[X]").bold().dim().red(),
+                                path.path().file_name().unwrap_or_default().to_os_string(),
+                                err
+                            );
+                        }
                     }
 
                     orphaned_plugins += 1;
