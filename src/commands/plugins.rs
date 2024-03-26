@@ -1,6 +1,6 @@
 //! Clap subcommand to list all installed plugins
 
-use std::path::PathBuf;
+use std::{cmp::Reverse, path::PathBuf};
 
 use chrono::{DateTime, Utc};
 use clap::{Arg, ArgAction, ArgMatches, Command};
@@ -245,8 +245,8 @@ async fn local_plugins() -> Result<Vec<(PathBuf, PluginVariant)>> {
     result.sort_by_key(|(_, variant)| {
         (
             variant.descriptor.name.clone(),
-            variant.descriptor.version.clone(),
-            variant.created_at,
+            Reverse(variant.descriptor.version.clone()),
+            Reverse(variant.created_at),
         )
     });
 
