@@ -1,6 +1,9 @@
 //! Clap subcommand to list all installed plugins
 
-use std::{cmp::Reverse, path::PathBuf};
+use std::{
+    cmp::Reverse,
+    path::{Path, PathBuf},
+};
 
 use chrono::{DateTime, Utc};
 use clap::{Arg, ArgAction, ArgMatches, Command};
@@ -62,8 +65,8 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
 async fn list_local_plugins(plugin_name: Option<&str>) -> Result<()> {
     // identical to print_plugin_versions_header() // TODO: restructure
     println!(
-        "{0: <16} {1: <16} {2: <16} {3: <16} {4: <32} {5}",
-        "NAME", "VERSION", "PLUGIN_VERSION", "DIGEST", "CREATED", "DOWNLOADED"
+        "{0: <16} {1: <16} {2: <16} {3: <16} {4: <64} {5: <32} {6}",
+        "NAME", "VERSION", "PLUGIN_VERSION", "DIGEST", "DIGEST_LONG", "CREATED", "DOWNLOADED"
     );
     let plugins = local_plugins().await?;
     for (file_name, variant) in plugins.into_iter() {
@@ -77,11 +80,12 @@ async fn list_local_plugins(plugin_name: Option<&str>) -> Result<()> {
         let file_metadata = std::fs::metadata(file_name)?;
         let datetime: DateTime<Utc> = file_metadata.created()?.into();
         println!(
-            "{0: <16} {1: <16} {2: <16} {3: <16} {4: <32} {5:}",
+            "{0: <16} {1: <16} {2: <16} {3: <16} {4: <64} {5: <32} {6:}",
             variant.descriptor.name,
             variant.descriptor.version,
             variant.descriptor.plugin_version,
             &variant.digest[..7],
+            variant.digest,
             variant.created_at.to_string(),
             datetime.naive_utc().to_string(),
         );
@@ -89,53 +93,24 @@ async fn list_local_plugins(plugin_name: Option<&str>) -> Result<()> {
     Ok(())
 }
 
-async fn remove_local_plugin(plugin_uri: &str) -> Result<()> {
-    let plugin_uri: PluginUri = plugin_uri.parse()?;
+async fn remove_local_plugin(plugin_uri_str: &str) -> Result<()> {
+    let plugin_uri: PluginUri = plugin_uri_str.parse()?;
 
-    // TODO: sort in the same way the backend would sort plugins
     let plugins = local_plugins().await?;
     for (meta_file_name, variant) in plugins.into_iter() {
+        // we match the following cases here:
+        // plugin_uri is a digest
+        // plugin_uri is {name}:{version}
+        // plugin_uri is {name}:{digest/digest_short}
         let version = plugin_uri.version();
-        if variant.descriptor.name == plugin_uri.image()
-            && (version == "latest"
-                || version == variant.descriptor.version
-                || version == &variant.digest[..version.len()])
+        if plugin_uri_str == variant.digest
+            || (variant.descriptor.name == plugin_uri.image()
+                && (version == "latest"
+                    || version == variant.descriptor.version
+                    || version == &variant.digest[..version.len()]))
         {
-            // delete plugin binary
-            let mut plugin_file_name = meta_file_name.clone();
-            plugin_file_name.set_extension(plugin_extension());
-            if let Err(err) = tokio::fs::remove_file(&plugin_file_name).await {
-                println!(
-                    "{} Unable to delete plugin {:?}: {}",
-                    console::style("[X]").bold().dim().red(),
-                    plugin_file_name
-                        .file_name()
-                        .unwrap_or_default()
-                        .to_os_string(),
-                    err
-                );
-                return Err(err.into());
-            }
-
-            // delete meta file
-            if let Err(err) = tokio::fs::remove_file(&meta_file_name).await {
-                println!(
-                    "{} Unable to delete .meta file for plugin {:?}: {}",
-                    console::style("[X]").bold().dim().red(),
-                    meta_file_name
-                        .file_name()
-                        .unwrap_or_default()
-                        .to_os_string(),
-                    err
-                );
-                return Err(err.into());
-            }
-
-            println!(
-                "{} Deleted plugin: {:?}",
-                console::style("[=]").bold().dim().green(),
-                plugin_file_name.as_os_str(),
-            );
+            // only remove one plugin
+            remove_local_plugin_file(&meta_file_name).await?;
             return Ok(());
         }
     }
@@ -149,6 +124,46 @@ async fn remove_local_plugin(plugin_uri: &str) -> Result<()> {
         "plugin `{}` not found",
         plugin_uri
     )))
+}
+
+async fn remove_local_plugin_file(meta_file_name: &Path) -> Result<()> {
+    // delete plugin binary
+    let mut plugin_file_name = meta_file_name.to_path_buf();
+    plugin_file_name.set_extension(plugin_extension());
+    if let Err(err) = tokio::fs::remove_file(&plugin_file_name).await {
+        println!(
+            "{} Unable to delete plugin {:?}: {}",
+            console::style("[X]").bold().dim().red(),
+            plugin_file_name
+                .file_name()
+                .unwrap_or_default()
+                .to_os_string(),
+            err
+        );
+        return Err(err.into());
+    }
+
+    // delete meta file
+    if let Err(err) = tokio::fs::remove_file(&meta_file_name).await {
+        println!(
+            "{} Unable to delete .meta file for plugin {:?}: {}",
+            console::style("[X]").bold().dim().red(),
+            meta_file_name
+                .file_name()
+                .unwrap_or_default()
+                .to_os_string(),
+            err
+        );
+        return Err(err.into());
+    }
+
+    println!(
+        "{} Deleted plugin: {:?}",
+        console::style("[=]").bold().dim().green(),
+        plugin_file_name.as_os_str(),
+    );
+
+    Ok(())
 }
 
 /// Removes all plugins which do not have a proper .meta file associated with them.

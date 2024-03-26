@@ -42,7 +42,7 @@ pub fn metadata() -> Command {
             .long("registry")
             .help("pulls the plugin from a custom registry")
             .action(ArgAction::Set),
-            Arg::new("pub-key")
+        Arg::new("pub-key")
             .short('p')
             .long("pub-key")
             .help("the public key used to verify the binary signature (this is required for self-hosted registries)")

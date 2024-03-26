@@ -12,8 +12,6 @@ use crate::error::{Error, Result};
 
 use super::config_file_path;
 
-// TODO: store fullpath for files, special check if those files can be read
-// TODO: handle those special cases in get/set function in Config impl
 pub const CONFIG_KEYS: [&str; 4] = ["registry", "token", "pub_key_file", "priv_key_file"];
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -27,7 +25,6 @@ pub struct Config {
 impl Config {
     #[inline]
     pub fn get(&self, key: &str) -> Result<Option<&str>> {
-        // refactor file handling: https://internals.rust-lang.org/t/pre-rfc-filter-map-for-option/8932
         match key {
             "registry" => Ok(Some(
                 self.registry.as_deref().unwrap_or(MEMFLOW_DEFAULT_REGISTRY),
@@ -122,10 +119,7 @@ pub fn metadata() -> Command {
         .subcommand_required(true)
         .subcommands([
             Command::new("get").args([Arg::new("key")]),
-            Command::new("set").args([
-                Arg::new("key").required(true),
-                Arg::new("value").required(true),
-            ]),
+            Command::new("set").args([Arg::new("key").required(true), Arg::new("value")]),
             Command::new("unset").args([Arg::new("key").required(true)]),
         ])
 }
@@ -160,33 +154,22 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
             }
             Ok(())
         }
-        Some(("set", matches)) => {
+        Some(("set", matches)) | Some(("unset", matches)) => {
             let key = matches.get_one::<String>("key").unwrap();
-            let value = matches.get_one::<String>("value").unwrap();
 
             let mut config = read_config().await?;
 
-            if let Err(err) = config.set(key, value) {
+            let result = if let Some(value) = matches.get_one::<String>("value") {
+                config.set(key, value)
+            } else {
+                config.unset(key)
+            };
+            if let Err(err) = result {
                 println!(
                     "{} Error setting config option `{}`: {}",
                     console::style("[X]").bold().dim().red(),
                     key,
                     err
-                );
-            }
-
-            write_config(config).await
-        }
-        Some(("unset", matches)) => {
-            let key = matches.get_one::<String>("key").unwrap();
-
-            let mut config = read_config().await?;
-            if let Err(_) = config.unset(key) {
-                println!(
-                    "{} Config option `{}` does not exist. Valid options are: {}",
-                    console::style("[X]").bold().dim().red(),
-                    key,
-                    CONFIG_KEYS.join(", ")
                 );
             }
 
