@@ -15,41 +15,16 @@ use crate::{
     util::{self, create_temp_dir},
 };
 
-/*
-// .subcommand(
-//     Command::new("build")
-//         .about("Build and install a local project")
-//         .visible_alias("b")
-//         .arg(Arg::new("name").long("name").short('n').required(true))
-//         .arg(Arg::new("path").long("path").short('p').default_value("."))
-//         .arg(Arg::new("script").long("script").short('s'))
-//         .arg(
-//             Arg::new("type")
-//                 .long("type")
-//                 .short('t')
-//                 .default_value("core_plugin"),
-//         )
-//         .arg(
-//             Arg::new("unsafe")
-//                 .long("unsafe")
-//                 .short('u')
-//                 .action(ArgAction::SetTrue),
-//         )
-//         .arg(
-//             Arg::new("sys")
-//                 .long("sys")
-//                 .short('g')
-//                 .action(ArgAction::SetTrue),
-//         )
-//         .arg(Arg::new("nocopy").long("nocopy").action(ArgAction::SetTrue)),
-*/
-
 #[inline]
 pub fn metadata() -> clap::Command {
     clap::Command::new("build").args([
         Arg::new("repository"),
         Arg::new("branch").long("branch").action(ArgAction::Set),
         Arg::new("tag").long("tag").action(ArgAction::Set),
+        Arg::new("all-features")
+            .long("all-features")
+            .help("builds the plugin with the --all-features flag")
+            .action(ArgAction::Set),
         Arg::new("path")
             .long("path")
             .short('p')
@@ -61,7 +36,7 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
     // rust / cargo is required for source builds
     ensure_rust::ensure_rust().await?;
 
-    // TODO: add optional --all-features flag
+    let all_features = matches.get_flag("all-features");
 
     if let Some(repository) = matches.get_one::<String>("repository") {
         // TODO: support non-github repos
@@ -83,7 +58,7 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
 
         // run compilation and installation
         let source_path = download_from_repository(repository, &commit, temp_dir.as_path()).await?;
-        let artifact_path = build_artifact_from_source(&source_path).await?;
+        let artifact_path = build_artifact_from_source(&source_path, all_features).await?;
         install_artifact(&artifact_path).await?
     } else if let Some(path) = matches.get_one::<String>("path") {
         // path installation
@@ -98,7 +73,7 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
             ));
         }
 
-        let artifact_path = build_artifact_from_source(path).await?;
+        let artifact_path = build_artifact_from_source(path, all_features).await?;
         install_artifact(&artifact_path).await?
     } else {
         println!(
@@ -139,14 +114,18 @@ async fn download_from_repository(
 }
 
 /// Builds the plugin from the given source path and returns the path of the resulting artifact.
-async fn build_artifact_from_source(source_path: &Path) -> Result<PathBuf> {
+async fn build_artifact_from_source(source_path: &Path, all_features: bool) -> Result<PathBuf> {
     // build plugin
     println!(
         "{} Building plugin in: {:?}",
         console::style("[-]").bold().dim(),
         source_path,
     );
-    let _ = util::cargo("build --release", source_path)?;
+    if all_features {
+        let _ = util::cargo("build --release --all-features", source_path)?;
+    } else {
+        let _ = util::cargo("build --release", source_path)?;
+    }
 
     // try to find a valid artifact in the build folder
     let artifact_path = source_path.to_path_buf().join("target").join("release");
