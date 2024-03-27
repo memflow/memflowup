@@ -142,8 +142,20 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
                     _ => (),
                 }
             } else {
-                println!("registry = {}", config.registry.unwrap_or_default());
-                println!("token = {}", config.token.unwrap_or_default());
+                println!("registry = \"{}\"", config.registry.unwrap_or_default());
+
+                let token = config.token.unwrap_or_default();
+                let token = if token.len() > 6 {
+                    format!(
+                        "{}{}",
+                        &token[..4],
+                        token[4..].chars().map(|_| '*').collect::<String>()
+                    )
+                } else {
+                    token.chars().map(|_| '*').collect()
+                };
+                println!("token = \"{}\"", token);
+                
                 println!(
                     "pub_key_file = {:?}",
                     config.pub_key_file.unwrap_or_default()
