@@ -18,16 +18,17 @@ use crate::{
 #[inline]
 pub fn metadata() -> clap::Command {
     clap::Command::new("build").args([
-        Arg::new("repository"),
-        Arg::new("branch").long("branch").action(ArgAction::Set),
-        Arg::new("tag").long("tag").action(ArgAction::Set),
+        Arg::new("repository").help("url to the git repository to pull from (e.g. https://github.com/memflow/memflow-coredump)"),
+        Arg::new("branch").long("branch").help("checks out the git repository at this specific branch").action(ArgAction::Set),
+        Arg::new("tag").long("tag").help("checks out the git repository at this specific tag").action(ArgAction::Set),
         Arg::new("all-features")
             .long("all-features")
             .help("builds the plugin with the --all-features flag")
-            .action(ArgAction::Set),
+            .action(ArgAction::SetTrue),
         Arg::new("path")
             .long("path")
             .short('p')
+            .help("file system path to local plugin source to install")
             .action(ArgAction::Set),
     ])
 }

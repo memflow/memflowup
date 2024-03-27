@@ -17,11 +17,15 @@ pub fn metadata() -> Command {
         .subcommands([
             Command::new("list")
                 .alias("ls")
-                .args([Arg::new("plugin_name").action(ArgAction::Set)]),
+                .args([Arg::new("plugin_name")
+                    .help("name of the plugin as an additional filter")
+                    .action(ArgAction::Set)]),
             Command::new("clean").alias("purge"),
             Command::new("remove")
                 .alias("rm")
-                .args([Arg::new("plugin_uri").action(ArgAction::Append)]),
+                .args([Arg::new("plugin_uri")
+                    .help("uri of the plugin in the form of [registry]/[name]:[version]")
+                    .action(ArgAction::Append)]),
         ])
 }
 

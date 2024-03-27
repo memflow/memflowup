@@ -13,7 +13,7 @@ use super::config::read_config;
 pub fn metadata() -> Command {
     Command::new("push").args([
         Arg::new("file_name")
-            .help("the file to upload")
+            .help("file to upload")
             .required(true)
             .action(ArgAction::Set),
         Arg::new("registry")
@@ -24,12 +24,12 @@ pub fn metadata() -> Command {
         Arg::new("token")
             .short('t')
             .long("token")
-            .help("the bearer token used in the upload request")
+            .help("bearer token used in the upload request")
             .action(ArgAction::Set),
         Arg::new("priv-key")
             .short('p')
             .long("priv-key")
-            .help("the private key used to sign the binary")
+            .help("private key used to sign the binary")
             .action(ArgAction::Set),
     ])
 }
