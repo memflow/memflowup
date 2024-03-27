@@ -39,7 +39,8 @@ which = "6.0"
 crates_io_api = { version = "0.9.0", default-features = false, features = ["rustls"] }
 
 # memflow-registry
-memflow-registry-client = { path = "../memflow-registry/memflow-registry-client" }
+#memflow-registry-client = { path = "../memflow-registry/memflow-registry-client" }
+memflow-registry-client = { git = "https://github.com/memflow/memflow-registry" }
 sha256 = "1.5"
 
 # source builds

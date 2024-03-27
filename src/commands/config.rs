@@ -155,7 +155,7 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
                     token.chars().map(|_| '*').collect()
                 };
                 println!("token = \"{}\"", token);
-                
+
                 println!(
                     "pub_key_file = {:?}",
                     config.pub_key_file.unwrap_or_default()
