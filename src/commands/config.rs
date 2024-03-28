@@ -119,9 +119,16 @@ pub fn metadata() -> Command {
     Command::new("config")
         .subcommand_required(true)
         .subcommands([
-            Command::new("get").args([Arg::new("key")]),
-            Command::new("set").args([Arg::new("key").required(true), Arg::new("value")]),
-            Command::new("unset").args([Arg::new("key").required(true)]),
+            Command::new("get").args([Arg::new("key").help("configuration entry key")]),
+            Command::new("set").args([
+                Arg::new("key")
+                    .help("configuration entry key")
+                    .required(true),
+                Arg::new("value").help("configuration value to set"),
+            ]),
+            Command::new("unset").args([Arg::new("key")
+                .help("configuration entry key")
+                .required(true)]),
         ])
 }
 

@@ -12,7 +12,9 @@ pub fn metadata() -> Command {
         .subcommand_required(false)
         .subcommands([
             Command::new("list").alias("ls").args([
-                Arg::new("plugin_name").action(ArgAction::Set),
+                Arg::new("plugin_name")
+                    .help("name of the plugin as an additional filter")
+                    .action(ArgAction::Set),
                 Arg::new("versions")
                     .short('l')
                     .long("versions")
@@ -22,18 +24,19 @@ pub fn metadata() -> Command {
             Command::new("remove").alias("rm").args([
                 Arg::new("plugin_digest")
                     .required(true)
+                    .help("full or short digest of the plugin")
                     .action(ArgAction::Set),
                 Arg::new("token")
                     .short('t')
                     .long("token")
-                    .help("the bearer token used in the upload request")
+                    .help("bearer token used in the upload request")
                     .action(ArgAction::Set),
             ]),
         ])
         .args([Arg::new("registry")
             .short('r')
             .long("registry")
-            .help("pushes the plugin to a custom registry")
+            .help("custom registry to use")
             .action(ArgAction::Set)])
 }
 

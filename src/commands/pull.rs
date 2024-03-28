@@ -37,7 +37,7 @@ pub fn metadata() -> Command {
         Arg::new("pub-key")
             .short('p')
             .long("pub-key")
-            .help("the public key used to verify the binary signature (this is required for self-hosted registries)")
+            .help("public key used to verify the binary signature (this is required for self-hosted registries)")
             .action(ArgAction::Set),
         ])
 }
