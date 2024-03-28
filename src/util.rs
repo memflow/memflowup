@@ -19,7 +19,7 @@ use crate::error::{Error, Result};
 /// On unix this is returns ~/.local/lib/memflow
 /// On windows this returns C:\Users\[Username]\Documents\memflow
 pub(crate) fn plugins_path() -> PathBuf {
-    if cfg!(unix) {
+    let path = if cfg!(unix) {
         dirs::home_dir()
             .unwrap()
             .join(".local")
@@ -27,23 +27,43 @@ pub(crate) fn plugins_path() -> PathBuf {
             .join("memflow")
     } else {
         dirs::document_dir().unwrap().join("memflow")
+    };
+
+    // ensure plugins path exists
+    if !path.exists() {
+        std::fs::create_dir_all(&path).expect("unable to create plugins directory");
     }
+
+    path
 }
 
-// TODO: move this to utils
 /// Returns the path in which memflowup config is stored.
 pub(crate) fn config_path() -> PathBuf {
-    if cfg!(unix) {
+    let path = if cfg!(unix) {
         dirs::home_dir().unwrap().join(".config").join("memflowup")
     } else {
         dirs::document_dir().unwrap()
+    };
+
+    // ensure config folder exists
+    if !path.exists() {
+        std::fs::create_dir_all(&path).expect("unable to create config directory");
     }
+
+    path
 }
 
 /// Returns the path that points to the memflowup config.
 #[inline]
 pub(crate) fn config_file_path() -> PathBuf {
-    config_path().join("config.json")
+    let file_path = config_path().join("config.json");
+
+    // ensure config file exists and contains valid json
+    if !file_path.exists() {
+        std::fs::write(&file_path, b"{}").expect("unable to write config file");
+    }
+
+    file_path
 }
 
 /// Constructs the filename of this plugin for the current os.

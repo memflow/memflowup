@@ -199,39 +199,13 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
     }
 }
 
-async fn ensure_config_file_path() -> Result<()> {
-    if cfg!(unix) {
-        // create ~/.config folder
-        let path = dirs::home_dir().unwrap().join(".config");
-        if !path.exists() {
-            tokio::fs::create_dir(&path).await?;
-        }
-
-        // create ~/.config/memflowup folder
-        let path = path.join("memflowup");
-        if !path.exists() {
-            tokio::fs::create_dir(&path).await?;
-        }
-    }
-
-    // create file
-    let path = util::config_file_path();
-    if !path.exists() {
-        tokio::fs::write(path, b"{}").await?;
-    }
-
-    Ok(())
-}
-
 pub async fn read_config() -> Result<Config> {
-    ensure_config_file_path().await?;
     let content = tokio::fs::read_to_string(util::config_file_path()).await?;
     let config: Config = serde_json::from_str(&content)?;
     Ok(config)
 }
 
 pub async fn write_config(config: Config) -> Result<()> {
-    ensure_config_file_path().await?;
     let content = serde_json::to_string(&config)?;
     Ok(tokio::fs::write(util::config_file_path(), content.as_bytes()).await?)
 }
