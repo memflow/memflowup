@@ -9,7 +9,7 @@ pub mod registry;
 #[inline]
 fn print_plugin_versions_header() {
     println!(
-        "{0: <16} {1: <16} {2: <16} {3: <8} {4: <65} {5:}",
-        "NAME", "VERSION", "PLUGIN_VERSION", "DIGEST", "DIGEST_LONG", "CREATED"
+        "{0: <16} {1: <16} {2: <12} {3: <4} {4: <8} {5: <65} {6:}",
+        "NAME", "VERSION", "ARCH", "ABI", "DIGEST", "DIGEST_LONG", "CREATED"
     );
 }

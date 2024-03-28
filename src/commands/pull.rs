@@ -111,7 +111,7 @@ async fn pull(
         registry.unwrap_or(MEMFLOW_DEFAULT_REGISTRY),
         "latest",
     )?;
-    let variant = memflow_registry_client::find_by_uri(&plugin_uri, None).await?;
+    let variant = memflow_registry_client::find_by_uri(&plugin_uri, false, None).await?;
 
     // check if file already exists
     let file_name = util::plugin_file_name(&variant);

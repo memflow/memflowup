@@ -70,9 +70,14 @@ async fn list_local_plugins(plugin_name: Option<&str>) -> Result<()> {
         }
 
         println!(
-            "{0: <16} {1: <16} {2: <16} {3: <8} {4: <65} {5:}",
+            "{0: <16} {1: <16} {2: <12} {3: <4} {4: <8} {5: <65} {6:}",
             variant.descriptor.name,
             variant.descriptor.version,
+            format!(
+                "{:?}/{:?}",
+                variant.descriptor.file_type, variant.descriptor.architecture
+            )
+            .to_ascii_lowercase(),
             variant.descriptor.plugin_version,
             &variant.digest[..7],
             variant.digest,

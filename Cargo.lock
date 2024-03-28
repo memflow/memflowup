@@ -1194,7 +1194,7 @@ checksum = "6c8640c5d730cb13ebd907d8d04b52f55ac9a2eec55b440c8892f40d56c76c1d"
 [[package]]
 name = "memflow-registry-client"
 version = "0.1.0"
-source = "git+https://github.com/memflow/memflow-registry#8d4797312fcdb2301add81bd57db6745977775ef"
+source = "git+https://github.com/memflow/memflow-registry#2ba9b22bbb43d461b3f0a63783604a1ebdc23b09"
 dependencies = [
  "log",
  "memflow-registry-shared",
@@ -1205,7 +1205,7 @@ dependencies = [
 [[package]]
 name = "memflow-registry-shared"
 version = "0.1.0"
-source = "git+https://github.com/memflow/memflow-registry#8d4797312fcdb2301add81bd57db6745977775ef"
+source = "git+https://github.com/memflow/memflow-registry#2ba9b22bbb43d461b3f0a63783604a1ebdc23b09"
 dependencies = [
  "chrono",
  "constcat",

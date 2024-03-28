@@ -84,12 +84,13 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
                     )
                     .await?;
                 }
-                Err(_) => {
+                Err(err) => {
                     println!(
                         "{} Plugin `{}` not found",
                         console::style("[X]").bold().dim().red(),
                         plugin_uri
                     );
+                    return Err(err);
                 }
             }
         }
