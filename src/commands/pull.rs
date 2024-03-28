@@ -123,14 +123,14 @@ async fn pull(
         if variant.digest == digest {
             println!(
                 "{} Plugin {:?} already exists with the same checksum, skipping download.",
-                console::style("[X]").bold().dim().red(),
+                console::style("[-]").bold().dim().yellow(),
                 file_name.file_name().unwrap()
             );
             return Ok(());
         } else {
             println!(
                 "{} Plugin {:?} already exists with a different checksum, redownloading.",
-                console::style("[X]").bold().dim().red(),
+                console::style("[-]").bold().dim().yellow(),
                 file_name.file_name().unwrap()
             );
         }
