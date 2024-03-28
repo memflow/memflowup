@@ -18,18 +18,18 @@ use crate::{
 #[inline]
 pub fn metadata() -> clap::Command {
     clap::Command::new("build").args([
-        Arg::new("repository").help("url to the git repository to pull from (e.g. https://github.com/memflow/memflow-coredump)"),
+        Arg::new("repository_or_path").help("url to the git repository to pull from (e.g. https://github.com/memflow/memflow-coredump) or local path").required(true),
+        Arg::new("path")
+            .long("path")
+            .short('p')
+            .help("file system path to local plugin source to install")
+            .action(ArgAction::SetTrue),
         Arg::new("branch").long("branch").help("checks out the git repository at this specific branch").action(ArgAction::Set),
         Arg::new("tag").long("tag").help("checks out the git repository at this specific tag").action(ArgAction::Set),
         Arg::new("all-features")
             .long("all-features")
             .help("builds the plugin with the --all-features flag")
             .action(ArgAction::SetTrue),
-        Arg::new("path")
-            .long("path")
-            .short('p')
-            .help("file system path to local plugin source to install")
-            .action(ArgAction::Set),
     ])
 }
 
@@ -37,20 +37,24 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
     // rust / cargo is required for source builds
     ensure_rust::ensure_rust().await?;
 
+    let repository_or_path = matches.get_one::<String>("repository_or_path").unwrap();
+    let path = matches.get_flag("path");
+
     let all_features = matches.get_flag("all-features");
 
-    if let Some(repository) = matches.get_one::<String>("repository") {
+    if !path {
+        // download and install from a repository
         // TODO: support non-github repos
         // TODO: print proper not found error instead of a random error
         let commit = if let Some(tag) = matches.get_one::<String>("tag") {
-            let tag = github_api::tag(repository, tag).await?;
+            let tag = github_api::tag(repository_or_path, tag).await?;
             tag.commit.sha
         } else {
             let branch = matches
                 .get_one::<String>("branch")
                 .map(String::as_str)
                 .unwrap_or_else(|| "main");
-            let branch = github_api::branch(repository, branch).await?;
+            let branch = github_api::branch(repository_or_path, branch).await?;
             branch.commit.sha
         };
 
@@ -58,12 +62,13 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
         let temp_dir = create_temp_dir("memflowup_build", &commit).await?;
 
         // run compilation and installation
-        let source_path = download_from_repository(repository, &commit, temp_dir.as_path()).await?;
+        let source_path =
+            download_from_repository(repository_or_path, &commit, temp_dir.as_path()).await?;
         let artifact_path = build_artifact_from_source(&source_path, all_features).await?;
-        install_artifact(&artifact_path).await?
-    } else if let Some(path) = matches.get_one::<String>("path") {
-        // path installation
-        let path = Path::new(path);
+        install_artifact(&artifact_path).await?;
+    } else {
+        // install from local path
+        let path = Path::new(repository_or_path);
         if !path.exists() || !path.is_dir() {
             println!(
                 "{} Path does not exist or is not a directory.",
@@ -75,12 +80,7 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
         }
 
         let artifact_path = build_artifact_from_source(path, all_features).await?;
-        install_artifact(&artifact_path).await?
-    } else {
-        println!(
-            "{} Invalid arguments, either a <repository> or `--path` is required. Please check `memflowup build help` for more information.",
-            console::style("[X]").bold().dim().red(),
-        );
+        install_artifact(&artifact_path).await?;
     }
 
     Ok(())

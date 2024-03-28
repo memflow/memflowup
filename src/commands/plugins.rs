@@ -3,12 +3,9 @@
 use std::{collections::HashSet, path::Path};
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use memflow_registry_client::shared::{PluginUri, PluginVariant};
+use memflow_registry_client::shared::PluginVariant;
 
-use crate::{
-    error::{Error, Result},
-    util,
-};
+use crate::{error::Result, util};
 
 #[inline]
 pub fn metadata() -> Command {
@@ -86,42 +83,21 @@ async fn list_local_plugins(plugin_name: Option<&str>) -> Result<()> {
 }
 
 async fn remove_local_plugin(plugin_uri_str: &str) -> Result<()> {
-    let plugin_uri: PluginUri = plugin_uri_str.parse()?;
-
-    let plugins = util::local_plugins().await?;
-    for (meta_file_name, variant) in plugins.into_iter() {
-        // we match the following cases here:
-        // plugin_uri is a digest
-        // plugin_uri is {name}:{version}
-        // plugin_uri is {name}:{digest/digest_short}
-        let version = plugin_uri.version();
-        if plugin_uri_str == variant.digest
-            || (variant.descriptor.name == plugin_uri.image()
-                && (version == "latest"
-                    || version == variant.descriptor.version
-                    || version == &variant.digest[..version.len()]))
-        {
-            // only remove one plugin
-            remove_local_plugin_file(&meta_file_name).await?;
-            return Ok(());
+    match util::find_local_plugin(plugin_uri_str).await {
+        Ok((plugin_file_name, _)) => remove_local_plugin_file(&plugin_file_name).await,
+        Err(err) => {
+            println!(
+                "{} Plugin `{}` not found",
+                console::style("[X]").bold().dim().red(),
+                plugin_uri_str
+            );
+            Err(err)
         }
     }
-
-    println!(
-        "{} Plugin `{}` not found",
-        console::style("[X]").bold().dim().red(),
-        plugin_uri
-    );
-    Err(Error::NotFound(format!(
-        "plugin `{}` not found",
-        plugin_uri
-    )))
 }
 
-async fn remove_local_plugin_file(meta_file_name: &Path) -> Result<()> {
+async fn remove_local_plugin_file(plugin_file_name: &Path) -> Result<()> {
     // delete plugin binary
-    let mut plugin_file_name = meta_file_name.to_path_buf();
-    plugin_file_name.set_extension(util::plugin_extension());
     if let Err(err) = tokio::fs::remove_file(&plugin_file_name).await {
         println!(
             "{} Unable to delete plugin {:?}: {}",
@@ -136,6 +112,8 @@ async fn remove_local_plugin_file(meta_file_name: &Path) -> Result<()> {
     }
 
     // delete meta file
+    let mut meta_file_name = plugin_file_name.to_path_buf();
+    meta_file_name.set_extension("meta");
     if let Err(err) = tokio::fs::remove_file(&meta_file_name).await {
         println!(
             "{} Unable to delete .meta file for plugin {:?}: {}",

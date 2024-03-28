@@ -8,11 +8,11 @@ use bytes::{Bytes, BytesMut};
 use futures_util::StreamExt;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::{debug, info, warn};
-use memflow_registry_client::shared::PluginVariant;
+use memflow_registry_client::shared::{PluginUri, PluginVariant};
 use reqwest::Response;
 use zip::ZipArchive;
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 
 /// Returns the path in which memflow plugins are stored.
 ///
@@ -139,6 +139,35 @@ pub async fn local_plugins() -> Result<Vec<(PathBuf, PluginVariant)>> {
     });
 
     Ok(result)
+}
+
+/// Finds a locally installed plugin based on the given plugin uri.
+pub async fn find_local_plugin(plugin_uri_str: &str) -> Result<(PathBuf, PluginVariant)> {
+    let plugin_uri: PluginUri = plugin_uri_str.parse()?;
+
+    let plugins = local_plugins().await?;
+    for (meta_file_name, variant) in plugins.into_iter() {
+        // we match the following cases here:
+        // plugin_uri is a digest
+        // plugin_uri is {name}:{version}
+        // plugin_uri is {name}:{digest/digest_short}
+        let version = plugin_uri.version();
+        if plugin_uri_str == variant.digest
+            || (variant.descriptor.name == plugin_uri.image()
+                && (version == "latest"
+                    || version == variant.descriptor.version
+                    || version == &variant.digest[..version.len()]))
+        {
+            let mut plugin_file_name = meta_file_name.clone();
+            plugin_file_name.set_extension(plugin_extension());
+            return Ok((plugin_file_name, variant));
+        }
+    }
+
+    Err(Error::NotFound(format!(
+        "plugin `{}` not found",
+        plugin_uri
+    )))
 }
 
 /// Unpack zip archive in memory

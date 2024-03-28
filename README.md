@@ -65,3 +65,9 @@ memflowup install memflow-kvm -s -d --reinstall
   memflowup config registry xyz.registry.io # overwrite default registry
 
 - store current memflowup version in config file to see what migration steps need to be run
+
+
+## Troubleshooting:
+
+mac in case cc failed in proc-macro2
+xcode-select --install
