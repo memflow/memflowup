@@ -64,8 +64,10 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
         // run compilation and installation
         let source_path =
             download_from_repository(repository_or_path, &commit, temp_dir.as_path()).await?;
-        let artifact_path = build_artifact_from_source(&source_path, all_features).await?;
-        install_artifact(&artifact_path).await?;
+        let artifacts = build_artifacts_from_source(&source_path, all_features).await?;
+        for artifact in artifacts.iter() {
+            install_artifact(artifact).await.ok();
+        }
     } else {
         // install from local path
         let path = Path::new(repository_or_path);
@@ -79,8 +81,10 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
             ));
         }
 
-        let artifact_path = build_artifact_from_source(path, all_features).await?;
-        install_artifact(&artifact_path).await?;
+        let artifacts = build_artifacts_from_source(path, all_features).await?;
+        for artifact in artifacts.iter() {
+            install_artifact(artifact).await.ok();
+        }
     }
 
     Ok(())
@@ -115,7 +119,11 @@ async fn download_from_repository(
 }
 
 /// Builds the plugin from the given source path and returns the path of the resulting artifact.
-async fn build_artifact_from_source(source_path: &Path, all_features: bool) -> Result<PathBuf> {
+/// For workspace repos this can return a list of artifacts.
+async fn build_artifacts_from_source(
+    source_path: &Path,
+    all_features: bool,
+) -> Result<Vec<PathBuf>> {
     // build plugin
     println!(
         "{} Building plugin in: {:?}",
@@ -131,39 +139,35 @@ async fn build_artifact_from_source(source_path: &Path, all_features: bool) -> R
     // try to find a valid artifact in the build folder
     let artifact_path = source_path.to_path_buf().join("target").join("release");
     let paths = std::fs::read_dir(artifact_path)?;
-    let mut artifact_file_name = None;
+    let mut artifacts = Vec::new();
     for path in paths.filter_map(|p| p.ok()) {
         if path.path().is_file() {
             if let Some(extension) = path.path().extension() {
                 if extension.to_str().unwrap_or_default() == util::plugin_extension() {
-                    artifact_file_name = Some(path.path());
-                    break;
+                    println!(
+                        "{} Plugin artifact successfully built: {:?}",
+                        console::style("[=]").bold().dim().green(),
+                        path.path()
+                    );
+                    artifacts.push(path.path());
                 }
             }
         }
     }
 
     // extract the artifact file name
-    let artifact_file_name = match artifact_file_name {
-        Some(v) => v,
-        None => {
-            println!(
+    if !artifacts.is_empty() {
+        Ok(artifacts)
+    } else {
+        println!(
                     "{} No valid build artifact with the `{}` file extension found. Are you sure this is a dylib project?",
                     console::style("[-]").bold().dim(),
                     util::plugin_extension(),
                 );
-            return Err(Error::NotFound(
-                "no supported build artifact found.".to_string(),
-            ));
-        }
-    };
-    println!(
-        "{} Plugin artifact successfully built: {:?}",
-        console::style("[=]").bold().dim().green(),
-        artifact_file_name
-    );
-
-    Ok(artifact_file_name)
+        Err(Error::NotFound(
+            "no supported build artifact found.".to_string(),
+        ))
+    }
 }
 
 async fn install_artifact(artifact_path: &Path) -> Result<()> {
@@ -185,8 +189,9 @@ async fn install_artifact(artifact_path: &Path) -> Result<()> {
         },
         None => {
             println!(
-                    "{} PluginDescriptor not found in artifact. Are you sure this is a memflow plugin project?",
+                    "{} PluginDescriptor not found in artifact {:?}. Are you sure this is a memflow plugin project?",
                     console::style("[-]").bold().dim(),
+                    artifact_path
                 );
             return Err(Error::NotFound(
                 "no supported build artifact found.".to_string(),
