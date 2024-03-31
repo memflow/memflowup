@@ -128,19 +128,34 @@ pub async fn read_response_with_progress(response: Response) -> Result<Bytes> {
     Ok(buffer.freeze())
 }
 
+/// Describes a locally installed plugin
+#[derive(Clone)]
+pub struct LocalPlugin {
+    pub plugin_file_name: PathBuf,
+    pub meta_file_name: PathBuf,
+    pub variant: PluginVariant,
+}
+
 /// Returns a list of all local plugins with their .meta information attached (sorted in the same way as memflow-registry)
-pub async fn local_plugins() -> Result<Vec<(PathBuf, PluginVariant)>> {
+pub async fn local_plugins() -> Result<Vec<LocalPlugin>> {
     let mut result = Vec::new();
 
     let paths = std::fs::read_dir(plugins_path())?;
     for path in paths.filter_map(|p| p.ok()) {
         if let Some(extension) = path.path().extension() {
             if extension.to_str().unwrap_or_default() == "meta" {
-                if let Ok(metadata) = serde_json::from_str::<PluginVariant>(
-                    &tokio::fs::read_to_string(path.path()).await?,
+                let meta_file_name = path.path();
+                if let Ok(variant) = serde_json::from_str::<PluginVariant>(
+                    &tokio::fs::read_to_string(&meta_file_name).await?,
                 ) {
+                    let mut plugin_file_name = meta_file_name.clone();
+                    plugin_file_name.set_extension(plugin_extension());
                     // TODO: additionally check existence of the file name and pass it over
-                    result.push((path.path(), metadata));
+                    result.push(LocalPlugin {
+                        plugin_file_name,
+                        meta_file_name,
+                        variant,
+                    });
                 } else {
                     // TODO: print warning about orphaned plugin and give hints
                     // on how to install plugins from source with memflowup
@@ -150,11 +165,11 @@ pub async fn local_plugins() -> Result<Vec<(PathBuf, PluginVariant)>> {
     }
 
     // sort by plugin_name, plugin_version and created_at
-    result.sort_by_key(|(_, variant)| {
+    result.sort_by_key(|plugin| {
         (
-            variant.descriptor.name.clone(),
-            Reverse(variant.descriptor.plugin_version),
-            Reverse(variant.created_at),
+            plugin.variant.descriptor.name.clone(),
+            Reverse(plugin.variant.descriptor.plugin_version),
+            Reverse(plugin.variant.created_at),
         )
     });
 
@@ -162,25 +177,23 @@ pub async fn local_plugins() -> Result<Vec<(PathBuf, PluginVariant)>> {
 }
 
 /// Finds a locally installed plugin based on the given plugin uri.
-pub async fn find_local_plugin(plugin_uri_str: &str) -> Result<(PathBuf, PluginVariant)> {
+pub async fn find_local_plugin(plugin_uri_str: &str) -> Result<LocalPlugin> {
     let plugin_uri: PluginUri = plugin_uri_str.parse()?;
 
     let plugins = local_plugins().await?;
-    for (meta_file_name, variant) in plugins.into_iter() {
+    for plugin in plugins.into_iter() {
         // we match the following cases here:
         // plugin_uri is a digest
         // plugin_uri is {name}:{version}
         // plugin_uri is {name}:{digest/digest_short}
         let version = plugin_uri.version();
-        if plugin_uri_str == variant.digest
-            || (variant.descriptor.name == plugin_uri.image()
+        if plugin_uri_str == plugin.variant.digest
+            || (plugin.variant.descriptor.name == plugin_uri.image()
                 && (version == "latest"
-                    || version == variant.descriptor.version
-                    || version == &variant.digest[..version.len()]))
+                    || version == plugin.variant.descriptor.version
+                    || version == &plugin.variant.digest[..version.len()]))
         {
-            let mut plugin_file_name = meta_file_name.clone();
-            plugin_file_name.set_extension(plugin_extension());
-            return Ok((plugin_file_name, variant));
+            return Ok(plugin);
         }
     }
 

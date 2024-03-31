@@ -75,12 +75,12 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
         // try to find the plugin first, then upload it to the registry
         for plugin_uri in plugin_uris_or_files.iter() {
             match util::find_local_plugin(plugin_uri).await {
-                Ok((plugin_file_name, _)) => {
+                Ok(plugin) => {
                     upload_plugin_file(
                         registry,
                         token.map(String::as_str),
                         priv_key_file,
-                        &plugin_file_name,
+                        &plugin.plugin_file_name,
                     )
                     .await?;
                 }

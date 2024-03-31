@@ -1,11 +1,14 @@
 //! Clap subcommand to list all installed plugins
 
-use std::{collections::HashSet, path::Path};
+use std::collections::HashSet;
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use memflow_registry_client::shared::PluginVariant;
 
-use crate::{error::Result, util};
+use crate::{
+    error::Result,
+    util::{self, LocalPlugin},
+};
 
 #[inline]
 pub fn metadata() -> Command {
@@ -40,7 +43,7 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
                 .collect::<Vec<_>>();
 
             for plugin_uri in plugin_uris.iter() {
-                remove_local_plugin(plugin_uri).await?;
+                remove_local_plugin_by_uri(plugin_uri).await?;
             }
 
             Ok(())
@@ -61,35 +64,35 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
 
 async fn list_local_plugins(plugin_name: Option<&str>) -> Result<()> {
     let plugins = util::local_plugins().await?;
-    for (_, variant) in plugins.into_iter() {
+    for plugin in plugins.into_iter() {
         // optionally filter by plugin name
         if let Some(plugin_name) = plugin_name {
-            if variant.descriptor.name != plugin_name {
+            if plugin.variant.descriptor.name != plugin_name {
                 continue;
             }
         }
 
         println!(
             "{0: <16} {1: <16} {2: <12} {3: <4} {4: <8} {5: <65} {6:}",
-            variant.descriptor.name,
-            variant.descriptor.version,
+            plugin.variant.descriptor.name,
+            plugin.variant.descriptor.version,
             format!(
                 "{:?}/{:?}",
-                variant.descriptor.file_type, variant.descriptor.architecture
+                plugin.variant.descriptor.file_type, plugin.variant.descriptor.architecture
             )
             .to_ascii_lowercase(),
-            variant.descriptor.plugin_version,
-            &variant.digest[..7],
-            variant.digest,
-            variant.created_at,
+            plugin.variant.descriptor.plugin_version,
+            &plugin.variant.digest[..7],
+            plugin.variant.digest,
+            plugin.variant.created_at,
         );
     }
     Ok(())
 }
 
-async fn remove_local_plugin(plugin_uri_str: &str) -> Result<()> {
+async fn remove_local_plugin_by_uri(plugin_uri_str: &str) -> Result<()> {
     match util::find_local_plugin(plugin_uri_str).await {
-        Ok((plugin_file_name, _)) => remove_local_plugin_file(&plugin_file_name).await,
+        Ok(plugin) => remove_local_plugin(&plugin).await,
         Err(err) => {
             println!(
                 "{} Plugin `{}` not found",
@@ -101,13 +104,14 @@ async fn remove_local_plugin(plugin_uri_str: &str) -> Result<()> {
     }
 }
 
-async fn remove_local_plugin_file(plugin_file_name: &Path) -> Result<()> {
+async fn remove_local_plugin(local_plugin: &LocalPlugin) -> Result<()> {
     // delete plugin binary
-    if let Err(err) = tokio::fs::remove_file(&plugin_file_name).await {
+    if let Err(err) = tokio::fs::remove_file(&local_plugin.plugin_file_name).await {
         println!(
             "{} Unable to delete plugin {:?}: {}",
             console::style("[X]").bold().dim().red(),
-            plugin_file_name
+            local_plugin
+                .plugin_file_name
                 .file_name()
                 .unwrap_or_default()
                 .to_os_string(),
@@ -117,13 +121,12 @@ async fn remove_local_plugin_file(plugin_file_name: &Path) -> Result<()> {
     }
 
     // delete meta file
-    let mut meta_file_name = plugin_file_name.to_path_buf();
-    meta_file_name.set_extension("meta");
-    if let Err(err) = tokio::fs::remove_file(&meta_file_name).await {
+    if let Err(err) = tokio::fs::remove_file(&local_plugin.meta_file_name).await {
         println!(
             "{} Unable to delete .meta file for plugin {:?}: {}",
             console::style("[X]").bold().dim().red(),
-            meta_file_name
+            local_plugin
+                .meta_file_name
                 .file_name()
                 .unwrap_or_default()
                 .to_os_string(),
@@ -135,7 +138,7 @@ async fn remove_local_plugin_file(plugin_file_name: &Path) -> Result<()> {
     println!(
         "{} Deleted plugin: {:?}",
         console::style("[=]").bold().dim().green(),
-        plugin_file_name.as_os_str(),
+        local_plugin.plugin_file_name.as_os_str(),
     );
 
     Ok(())
@@ -228,14 +231,14 @@ async fn remove_old_plugin_versions() -> Result<usize> {
     // get a list of pre-sorted plugins, we simply need to delete all but the first occurence of each plugin
     let mut seen = HashSet::new();
     let plugins = util::local_plugins().await?;
-    for (meta_file_name, variant) in plugins.iter() {
-        if seen.contains(&variant.descriptor.name) {
+    for plugin in plugins.iter() {
+        if seen.contains(&plugin.variant.descriptor.name) {
             // delete the file if we have seen a newer version already
-            remove_local_plugin_file(meta_file_name).await?;
+            remove_local_plugin(plugin).await?;
             old_plugin_versions += 1;
         } else {
             // add the file to our "seen" list
-            seen.insert(variant.descriptor.name.clone());
+            seen.insert(plugin.variant.descriptor.name.clone());
         }
     }
 
