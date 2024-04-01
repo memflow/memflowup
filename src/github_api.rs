@@ -1,7 +1,7 @@
 use reqwest::{Response, Url};
 use serde::{Deserialize, Serialize};
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 
 const USER_AGENT: &str = "memflowup 0.2.0";
 
@@ -64,6 +64,12 @@ pub struct Commit {
 
 /// Resolves a specific branch from github
 pub async fn branch(url: &str, branch: &str) -> Result<Branch> {
+    if !url.contains("github.com") {
+        return Err(Error::Http(
+            "github api only works with github.com api".to_owned(),
+        ));
+    }
+
     let path: Url = format!(
         "{}/branches/{}",
         url.replace("github.com", "api.github.com/repos"),
@@ -84,6 +90,12 @@ pub async fn branch(url: &str, branch: &str) -> Result<Branch> {
 
 /// Resolves a specific tag from github
 pub async fn tag(url: &str, tag: &str) -> Result<Tag> {
+    if !url.contains("github.com") {
+        return Err(Error::Http(
+            "github api only works with github.com api".to_owned(),
+        ));
+    }
+
     let path: Url = format!(
         "{}/git/ref/tags/{}",
         url.replace("github.com", "api.github.com/repos"),
@@ -104,6 +116,12 @@ pub async fn tag(url: &str, tag: &str) -> Result<Tag> {
 
 /// Downloads the code for specific commit in the repository
 pub async fn download_code_for_commit(url: &str, commit: &str) -> Result<Response> {
+    if !url.contains("github.com") {
+        return Err(Error::Http(
+            "github api only works with github.com api".to_owned(),
+        ));
+    }
+
     let path: Url = format!("{}/archive/{}.zip", url, commit).parse().unwrap(); // TODO: parse error
 
     let client = reqwest::Client::new();

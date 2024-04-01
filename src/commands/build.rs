@@ -1,9 +1,13 @@
 //! Clap subcommand to configure memflowup
 
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    process::{exit, Command, Stdio},
+};
 
 use chrono::Utc;
 use clap::{Arg, ArgAction, ArgMatches};
+use inquire::Confirm;
 use memflow_registry_client::shared::PluginVariant;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
@@ -62,9 +66,8 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
         let temp_dir = create_temp_dir("memflowup_build", &commit).await?;
 
         // run compilation and installation
-        let source_path =
-            download_from_repository(repository_or_path, &commit, temp_dir.as_path()).await?;
-        let artifacts = build_artifacts_from_source(&source_path, all_features).await?;
+        download_repository(repository_or_path, &commit, temp_dir.as_path()).await?;
+        let artifacts = build_artifacts_from_source(&temp_dir, all_features).await?;
         for artifact in artifacts.iter() {
             install_artifact(artifact).await.ok();
         }
@@ -90,12 +93,68 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
     Ok(())
 }
 
-/// Downloads the repository and returns the temporary path in which the contents was extracted.
-async fn download_from_repository(
+/// Downloads the repository to the temporary directory
+async fn download_repository(repository: &str, commit: &str, temp_dir_path: &Path) -> Result<()> {
+    match which::which("git") {
+        Ok(_) => download_repository_via_git(repository, commit, temp_dir_path).await,
+        Err(_) => {
+            println!(
+                "Git was not found on your system. It is either not installed or not in your PATH."
+            );
+            println!();
+            println!("Git is required to check-out repositories in order to build them properly.");
+            println!("If you continue without Git its possible that the build will fail in case the repository contains submodules.");
+
+            let ans =
+                Confirm::new("Do you want to continue using the fallback download mechanism?")
+                    .with_default(false)
+                    .with_help_message("Some things might not work as intended.")
+                    .prompt();
+
+            match ans {
+                Ok(false) | Err(_) => exit(0),
+                _ => download_repository_via_http(repository, commit, temp_dir_path).await,
+            }
+        }
+    }
+}
+
+async fn download_repository_via_git(
     repository: &str,
     commit: &str,
     temp_dir_path: &Path,
-) -> Result<PathBuf> {
+) -> Result<()> {
+    let temp_dir_path_str = temp_dir_path.to_str().ok_or("invalid temporary path")?;
+    Command::new("git")
+        .args([
+            "clone",
+            "--recursive",
+            "--depth",
+            "1",
+            repository,
+            temp_dir_path_str,
+        ])
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .output()
+        .map_err(|_| "unable to clone repository")?;
+
+    Command::new("git")
+        .current_dir(temp_dir_path)
+        .args(["reset", "--hard", commit])
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .output()
+        .map_err(|_| "unable to find commit hash")?;
+
+    Ok(())
+}
+
+async fn download_repository_via_http(
+    repository: &str,
+    commit: &str,
+    temp_dir_path: &Path,
+) -> Result<()> {
     // query file and download to memory
     println!(
         "{} Downloading plugin source from {} with commit {}",
@@ -106,16 +165,11 @@ async fn download_from_repository(
     let response = github_api::download_code_for_commit(repository, commit).await?;
     let buffer = util::read_response_with_progress(response).await?;
 
-    // create temporary build directory
-    // TODO: replace https://docs.rs/tempfile/latest/tempfile/fn.tempdir.html
-    let build_hash = sha256::digest(buffer.as_ref());
-    let extract_path = temp_dir_path.to_path_buf().join(build_hash);
-
     // unpack archive
     println!("{} Unpacking source", console::style("[-]").bold().dim(),);
-    util::zip_unpack(buffer.as_ref(), &extract_path, 1)?;
+    util::zip_unpack(buffer.as_ref(), temp_dir_path, 1)?;
 
-    Ok(extract_path)
+    Ok(())
 }
 
 /// Builds the plugin from the given source path and returns the path of the resulting artifact.
