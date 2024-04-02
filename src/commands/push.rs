@@ -1,6 +1,6 @@
 //! Clap subcommand to push plugins in a registry
 
-use std::path::Path;
+use std::{path::Path, process::exit};
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use memflow_registry_client::shared::SignatureGenerator;
@@ -71,18 +71,21 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
         }
     };
 
+    let mut success = true;
     if !file {
         // try to find the plugin first, then upload it to the registry
         for plugin_uri in plugin_uris_or_files.iter() {
             match util::find_local_plugin(plugin_uri).await {
                 Ok(plugin) => {
-                    upload_plugin_file(
-                        registry,
-                        token.map(String::as_str),
-                        priv_key_file,
-                        &plugin.plugin_file_name,
-                    )
-                    .await?;
+                    success = success
+                        && upload_plugin_file(
+                            registry,
+                            token.map(String::as_str),
+                            priv_key_file,
+                            &plugin.plugin_file_name,
+                        )
+                        .await
+                        .is_ok();
                 }
                 Err(err) => {
                     println!(
@@ -97,17 +100,24 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
     } else {
         for file_name in plugin_uris_or_files.iter() {
             // upload a file directly
-            upload_plugin_file(
-                registry,
-                token.map(String::as_str),
-                priv_key_file,
-                file_name,
-            )
-            .await?;
+            success = success
+                && upload_plugin_file(
+                    registry,
+                    token.map(String::as_str),
+                    priv_key_file,
+                    file_name,
+                )
+                .await
+                .is_ok();
         }
     }
 
-    Ok(())
+    // TODO: ideally we differentiate between hard- & soft errors on the backend site instead of returning an error code for a duplicated entry.
+    if success {
+        Ok(())
+    } else {
+        exit(1)
+    }
 }
 
 async fn upload_plugin_file<P: AsRef<Path>>(
@@ -126,6 +136,7 @@ async fn upload_plugin_file<P: AsRef<Path>>(
                 console::style("[=]").bold().dim().green(),
                 file_name.as_ref()
             );
+            Ok(())
         }
         Err(msg) => {
             println!(
@@ -134,8 +145,7 @@ async fn upload_plugin_file<P: AsRef<Path>>(
                 file_name.as_ref(),
                 msg
             );
+            Err(Error::Http(msg.to_string()))
         }
     }
-
-    Ok(())
 }
