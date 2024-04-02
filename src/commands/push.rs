@@ -3,7 +3,7 @@
 use std::{path::Path, process::exit};
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use memflow_registry_client::shared::SignatureGenerator;
+use memflow_registry_client::shared::{structs::PluginUploadResponse, SignatureGenerator};
 
 use crate::{
     error::{Error, Result},
@@ -71,21 +71,24 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
         }
     };
 
-    let mut success = true;
+    let mut exit_code = 0;
+
     if !file {
         // try to find the plugin first, then upload it to the registry
         for plugin_uri in plugin_uris_or_files.iter() {
             match util::find_local_plugin(plugin_uri).await {
                 Ok(plugin) => {
-                    success = success
-                        && upload_plugin_file(
-                            registry,
-                            token.map(String::as_str),
-                            priv_key_file,
-                            &plugin.plugin_file_name,
-                        )
-                        .await
-                        .is_ok();
+                    if upload_plugin_file(
+                        registry,
+                        token.map(String::as_str),
+                        priv_key_file,
+                        &plugin.plugin_file_name,
+                    )
+                    .await
+                    .is_err()
+                    {
+                        exit_code = 1;
+                    }
                 }
                 Err(err) => {
                     println!(
@@ -100,23 +103,24 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
     } else {
         for file_name in plugin_uris_or_files.iter() {
             // upload a file directly
-            success = success
-                && upload_plugin_file(
-                    registry,
-                    token.map(String::as_str),
-                    priv_key_file,
-                    file_name,
-                )
-                .await
-                .is_ok();
+            if upload_plugin_file(
+                registry,
+                token.map(String::as_str),
+                priv_key_file,
+                file_name,
+            )
+            .await
+            .is_err()
+            {
+                exit_code = 1;
+            }
         }
     }
 
-    // TODO: ideally we differentiate between hard- & soft errors on the backend site instead of returning an error code for a duplicated entry.
-    if success {
+    if exit_code == 0 {
         Ok(())
     } else {
-        exit(1)
+        exit(exit_code)
     }
 }
 
@@ -130,13 +134,23 @@ async fn upload_plugin_file<P: AsRef<Path>>(
     let mut generator = SignatureGenerator::new(priv_key_file)?;
     match memflow_registry_client::upload(registry, token, file_name.as_ref(), &mut generator).await
     {
-        Ok(_) => {
+        Ok(PluginUploadResponse::Added) => {
             println!(
                 "{} Uploaded plugin {:?}",
                 console::style("[=]").bold().dim().green(),
                 file_name.as_ref()
             );
             Ok(())
+        }
+        Ok(PluginUploadResponse::AlreadyExists) => {
+            println!(
+                "{} Plugin {:?} already exists with the same digest",
+                console::style("[-]").bold().dim().red(),
+                file_name.as_ref(),
+            );
+            Err(Error::AlreadyExists(
+                "plugin with the same digest was already added".to_owned(),
+            ))
         }
         Err(msg) => {
             println!(
