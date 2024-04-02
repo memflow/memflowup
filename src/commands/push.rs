@@ -148,9 +148,7 @@ async fn upload_plugin_file<P: AsRef<Path>>(
                 console::style("[-]").bold().dim().red(),
                 file_name.as_ref(),
             );
-            Err(Error::AlreadyExists(
-                "plugin with the same digest was already added".to_owned(),
-            ))
+            Ok(())
         }
         Err(msg) => {
             println!(
