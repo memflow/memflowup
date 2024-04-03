@@ -8,6 +8,7 @@ use std::{
 use chrono::Utc;
 use clap::{Arg, ArgAction, ArgMatches};
 use inquire::Confirm;
+use memflow::plugins::plugin_analyzer;
 use memflow_registry_client::shared::PluginVariant;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
@@ -227,8 +228,7 @@ async fn build_artifacts_from_source(
 async fn install_artifact(artifact_path: &Path) -> Result<()> {
     // parse the plugins descriptor
     let artifact_content = tokio::fs::read(artifact_path).await?;
-    let descriptors =
-        memflow_registry_client::shared::plugin_analyzer::parse_descriptors(&artifact_content)?;
+    let descriptors = plugin_analyzer::parse_descriptors(&artifact_content)?;
 
     // construct variant of this plugin, for now we only use the first descriptor found
     // TODO: support multiple descriptors

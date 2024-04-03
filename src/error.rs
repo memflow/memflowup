@@ -24,6 +24,8 @@ pub enum Error {
     // External crate error forwards
     #[error("HTTP error: {0}")]
     Http(String),
+    #[error("Memflow error: {0}")]
+    Memflow(String),
     #[error("Registry error: {0}")]
     Registry(String),
     #[error("Signature error: {0}")]
@@ -71,6 +73,12 @@ impl From<serde_json::error::Error> for Error {
 impl From<crates_io_api::Error> for Error {
     fn from(err: crates_io_api::Error) -> Self {
         Error::Http(err.to_string())
+    }
+}
+
+impl From<memflow::error::Error> for Error {
+    fn from(err: memflow::error::Error) -> Self {
+        Error::Memflow(err.to_string())
     }
 }
 
