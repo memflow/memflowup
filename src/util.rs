@@ -89,19 +89,9 @@ pub(crate) fn plugin_file_name(variant: &PluginVariant) -> PathBuf {
     }
 
     // append appropriate file extension
-    file_name.set_extension(plugin_extension());
+    file_name.set_extension(memflow::plugins::plugin_extension());
 
     file_name
-}
-
-/// Returns the plugin extension appropriate for the current os
-pub(crate) fn plugin_extension() -> &'static str {
-    #[cfg(target_os = "windows")]
-    return "dll";
-    #[cfg(target_os = "linux")]
-    return "so";
-    #[cfg(target_os = "macos")]
-    return "dylib";
 }
 
 pub async fn read_response_with_progress(response: Response) -> Result<Bytes> {
@@ -149,7 +139,7 @@ pub async fn local_plugins() -> Result<Vec<LocalPlugin>> {
                     &tokio::fs::read_to_string(&meta_file_name).await?,
                 ) {
                     let mut plugin_file_name = meta_file_name.clone();
-                    plugin_file_name.set_extension(plugin_extension());
+                    plugin_file_name.set_extension(memflow::plugins::plugin_extension());
                     // TODO: additionally check existence of the file name and pass it over
                     result.push(LocalPlugin {
                         plugin_file_name,

@@ -198,7 +198,7 @@ async fn build_artifacts_from_source(
     for path in paths.filter_map(|p| p.ok()) {
         if path.path().is_file() {
             if let Some(extension) = path.path().extension() {
-                if extension.to_str().unwrap_or_default() == util::plugin_extension() {
+                if extension.to_str().unwrap_or_default() == memflow::plugins::plugin_extension() {
                     println!(
                         "{} Plugin artifact successfully built: {:?}",
                         console::style("[=]").bold().dim().green(),
@@ -217,7 +217,7 @@ async fn build_artifacts_from_source(
         println!(
                     "{} No valid build artifact with the `{}` file extension found. Are you sure this is a dylib project?",
                     console::style("[-]").bold().dim(),
-                    util::plugin_extension(),
+                    memflow::plugins::plugin_extension(),
                 );
         Err(Error::NotFound(
             "no supported build artifact found.".to_string(),

@@ -152,7 +152,7 @@ async fn remove_orphaned_plugins() -> Result<usize> {
     for path in paths.filter_map(|p| p.ok()) {
         if let Some(extension) = path.path().extension() {
             // TODO: should we only check for plugin_extension here?
-            if extension.to_str().unwrap_or_default() == util::plugin_extension() {
+            if extension.to_str().unwrap_or_default() == memflow::plugins::plugin_extension() {
                 // check if the corresponding .meta file exists
                 let mut meta_file_name = path.path();
                 meta_file_name.set_extension("meta");
