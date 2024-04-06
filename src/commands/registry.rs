@@ -73,7 +73,7 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
                 let versions = matches.get_flag("versions");
 
                 // list all plugins
-                let plugins = memflow_registry_client::plugins(registry).await?;
+                let plugins = memflow_registry::client::plugins(registry).await?;
                 if versions {
                     // TODO: display plugins that do not have a version for our current os?
                     super::print_plugin_versions_header();
@@ -96,7 +96,7 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
             let token = matches.get_one::<String>("token").or(config.token.as_ref());
 
             if let Err(err) =
-                memflow_registry_client::delete(registry, token.map(String::as_str), plugin_digest)
+                memflow_registry::client::delete(registry, token.map(String::as_str), plugin_digest)
                     .await
             {
                 println!(
@@ -122,7 +122,7 @@ async fn list_plugin_versions(
 ) -> Result<()> {
     // list versions of a specific plugin
     let plugins =
-        memflow_registry_client::plugin_versions(registry, plugin_name, all_archs, None, limit)
+        memflow_registry::client::plugin_versions(registry, plugin_name, all_archs, None, limit)
             .await?;
     // TODO: dedup versions
 

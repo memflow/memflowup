@@ -9,7 +9,7 @@ use chrono::Utc;
 use clap::{Arg, ArgAction, ArgMatches};
 use inquire::Confirm;
 use memflow::plugins::plugin_analyzer;
-use memflow_registry_client::shared::PluginVariant;
+use memflow_registry::storage::PluginMetadata;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 
@@ -231,30 +231,27 @@ async fn install_artifact(artifact_path: &Path) -> Result<()> {
     let descriptors = plugin_analyzer::parse_descriptors(&artifact_content)?;
 
     // construct variant of this plugin, for now we only use the first descriptor found
-    // TODO: support multiple descriptors
-    // TODO: currently we do not ensure that digest is identical each time we build it.
-    // TODO: We should ensure the build timestamps match to have truly reproducible builds
-    let variant = match descriptors.first() {
-        Some(descriptor) => PluginVariant {
-            digest: sha256::digest(&artifact_content),
-            signature: String::new(),
-            created_at: Utc::now().naive_utc(),
-            descriptor: descriptor.clone(),
-        },
-        None => {
-            println!(
-                    "{} PluginDescriptor not found in artifact {:?}. Are you sure this is a memflow plugin project?",
-                    console::style("[-]").bold().dim(),
-                    artifact_path
-                );
-            return Err(Error::NotFound(
-                "no supported build artifact found.".to_string(),
-            ));
-        }
+    // TODO: currently we do not ensure that digest is identical each time we build it. we should ensure the build timestamps match to have truly reproducible builds.
+    if descriptors.is_empty() {
+        println!(
+            "{} PluginDescriptor not found in artifact {:?}. Are you sure this is a memflow plugin project?",
+            console::style("[-]").bold().dim(),
+            artifact_path
+        );
+        return Err(Error::NotFound(
+            "no supported build artifact found.".to_string(),
+        ));
+    }
+
+    let metadata = PluginMetadata {
+        digest: sha256::digest(&artifact_content),
+        signature: String::new(),
+        created_at: Utc::now().naive_utc(),
+        descriptors,
     };
 
     // construct destination file_name in memflowup registry
-    let file_name = util::plugin_file_name(&variant);
+    let file_name = util::plugin_file_name(&metadata);
     if file_name.exists() {
         println!(
             "{} Plugin already exists, overwriting.",
@@ -277,7 +274,7 @@ async fn install_artifact(artifact_path: &Path) -> Result<()> {
     // TODO: this does not contain all plugins in this file - allow querying that from memflow-registry as well
     let mut file_name = file_name.clone();
     file_name.set_extension("meta");
-    tokio::fs::write(&file_name, serde_json::to_string_pretty(&variant)?).await?;
+    tokio::fs::write(&file_name, serde_json::to_string_pretty(&metadata)?).await?;
 
     println!(
         "{} Wrote plugin metadata to: {:?}",

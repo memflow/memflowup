@@ -3,9 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use clap::{Arg, ArgMatches, Command};
-use memflow_registry_client::shared::{
-    SignatureGenerator, SignatureVerifier, MEMFLOW_DEFAULT_REGISTRY,
-};
+use memflow_registry::{SignatureGenerator, SignatureVerifier, MEMFLOW_DEFAULT_REGISTRY};
 use serde::{Deserialize, Serialize};
 
 use crate::{

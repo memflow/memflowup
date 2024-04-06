@@ -82,8 +82,8 @@ impl From<memflow::error::Error> for Error {
     }
 }
 
-impl From<memflow_registry_client::Error> for Error {
-    fn from(err: memflow_registry_client::Error) -> Self {
+impl From<memflow_registry::Error> for Error {
+    fn from(err: memflow_registry::Error) -> Self {
         Error::Registry(err.to_string())
     }
 }

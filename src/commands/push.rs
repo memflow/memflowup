@@ -3,7 +3,7 @@
 use std::{path::Path, process::exit};
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use memflow_registry_client::shared::{structs::PluginUploadResponse, SignatureGenerator};
+use memflow_registry::{rest::models::PluginUploadResponse, SignatureGenerator};
 
 use crate::{
     error::{Error, Result},
@@ -132,7 +132,8 @@ async fn upload_plugin_file<P: AsRef<Path>>(
 ) -> Result<()> {
     // TODO: upload progress
     let mut generator = SignatureGenerator::new(priv_key_file)?;
-    match memflow_registry_client::upload(registry, token, file_name.as_ref(), &mut generator).await
+    match memflow_registry::client::upload(registry, token, file_name.as_ref(), &mut generator)
+        .await
     {
         Ok(PluginUploadResponse::Added) => {
             println!(

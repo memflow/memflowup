@@ -9,7 +9,7 @@ use crate::{
     error::{Error, Result},
     util,
 };
-use memflow_registry_client::shared::{
+use memflow_registry::{
     PluginUri, SignatureVerifier, MEMFLOW_DEFAULT_REGISTRY, MEMFLOW_DEFAULT_REGISTRY_VERIFYING_KEY,
 };
 
@@ -62,7 +62,7 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
 
     // TODO: support custom registry for wildcard
     if all {
-        let plugins = memflow_registry_client::plugins(None).await?;
+        let plugins = memflow_registry::client::plugins(None).await?;
         for plugin in plugins.iter() {
             if let Err(err) = pull(registry, &plugin.name, force, pub_key_file).await {
                 println!(
@@ -111,10 +111,13 @@ async fn pull(
         registry.unwrap_or(MEMFLOW_DEFAULT_REGISTRY),
         "latest",
     )?;
-    let variant = memflow_registry_client::find_by_uri(&plugin_uri, false, None).await?;
+    let variant = memflow_registry::client::find_by_uri(&plugin_uri, false, None).await?;
+
+    // query file metadata for variant
+    let metadata = memflow_registry::client::metadata(&plugin_uri, &variant).await?;
 
     // check if file already exists
-    let file_name = util::plugin_file_name(&variant);
+    let file_name = util::plugin_file_name(&metadata);
     if !force && file_name.exists() {
         let bytes = tokio::fs::read(&file_name).await?;
         let digest = sha256::digest(&bytes[..]);
@@ -137,7 +140,7 @@ async fn pull(
     }
 
     // query file and download to memory
-    let response = memflow_registry_client::download(&plugin_uri, &variant).await?;
+    let response = memflow_registry::client::download(&plugin_uri, &variant).await?;
     let buffer = util::read_response_with_progress(response).await?;
 
     // verify file signature
@@ -167,7 +170,7 @@ async fn pull(
     // TODO: this does not contain all plugins in this file - allow querying that from memflow-registry as well
     let mut file_name = file_name.clone();
     file_name.set_extension("meta");
-    tokio::fs::write(&file_name, serde_json::to_string_pretty(&variant)?).await?;
+    tokio::fs::write(&file_name, serde_json::to_string_pretty(&metadata)?).await?;
 
     println!(
         "{} Wrote plugin metadata to: {:?}",

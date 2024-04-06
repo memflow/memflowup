@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use memflow_registry_client::shared::PluginVariant;
+use memflow_registry::storage::PluginMetadata;
 
 use crate::{
     error::Result,
@@ -67,24 +67,24 @@ async fn list_local_plugins(plugin_name: Option<&str>) -> Result<()> {
     for plugin in plugins.into_iter() {
         // optionally filter by plugin name
         if let Some(plugin_name) = plugin_name {
-            if plugin.variant.descriptor.name != plugin_name {
+            if plugin.descriptor.name != plugin_name {
                 continue;
             }
         }
 
         println!(
             "{0: <16} {1: <16} {2: <12} {3: <4} {4: <8} {5: <65} {6:}",
-            plugin.variant.descriptor.name,
-            plugin.variant.descriptor.version,
+            plugin.descriptor.name,
+            plugin.descriptor.version,
             format!(
                 "{:?}/{:?}",
-                plugin.variant.descriptor.file_type, plugin.variant.descriptor.architecture
+                plugin.descriptor.file_type, plugin.descriptor.architecture
             )
             .to_ascii_lowercase(),
-            plugin.variant.descriptor.plugin_version,
-            &plugin.variant.digest[..7],
-            plugin.variant.digest,
-            plugin.variant.created_at,
+            plugin.descriptor.plugin_version,
+            &plugin.digest[..7],
+            plugin.digest,
+            plugin.created_at,
         );
     }
     Ok(())
@@ -158,7 +158,7 @@ async fn remove_orphaned_plugins() -> Result<usize> {
                 meta_file_name.set_extension("meta");
 
                 let orphaned = if meta_file_name.exists() {
-                    if let Ok(metadata) = serde_json::from_str::<PluginVariant>(
+                    if let Ok(metadata) = serde_json::from_str::<PluginMetadata>(
                         &tokio::fs::read_to_string(meta_file_name).await?,
                     ) {
                         let bytes = tokio::fs::read(path.path()).await?;
@@ -232,13 +232,13 @@ async fn remove_old_plugin_versions() -> Result<usize> {
     let mut seen = HashSet::new();
     let plugins = util::local_plugins().await?;
     for plugin in plugins.iter() {
-        if seen.contains(&plugin.variant.descriptor.name) {
+        if seen.contains(&plugin.descriptor.name) {
             // delete the file if we have seen a newer version already
             remove_local_plugin(plugin).await?;
             old_plugin_versions += 1;
         } else {
             // add the file to our "seen" list
-            seen.insert(plugin.variant.descriptor.name.clone());
+            seen.insert(plugin.descriptor.name.clone());
         }
     }
 

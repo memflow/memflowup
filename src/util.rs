@@ -5,10 +5,13 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
 use bytes::{Bytes, BytesMut};
+use chrono::NaiveDateTime;
 use futures_util::StreamExt;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::{debug, info, warn};
-use memflow_registry_client::shared::{PluginUri, PluginVariant};
+use memflow::plugins::plugin_analyzer::PluginDescriptorInfo;
+use memflow_registry::storage::PluginMetadata;
+use memflow_registry::PluginUri;
 use reqwest::Response;
 use zip::ZipArchive;
 
@@ -70,21 +73,29 @@ pub(crate) fn config_file_path() -> PathBuf {
 ///
 /// On unix this returns libmemflow_[name]_[digest].so/.dylib
 /// On windows this returns memflow_[name]_[digest].dll
-pub(crate) fn plugin_file_name(variant: &PluginVariant) -> PathBuf {
+pub(crate) fn plugin_file_name(metadata: &PluginMetadata) -> PathBuf {
     let mut file_name = plugins_path();
 
     // prepend the library name and append the file digest
     if cfg!(unix) {
         file_name.push(&format!(
             "libmemflow_{}_{}",
-            variant.descriptor.name,
-            &variant.digest[..7]
+            metadata
+                .descriptors
+                .first()
+                .map(|d| d.name.clone())
+                .unwrap_or_else(|| "unknown".to_string()),
+            &metadata.digest[..7]
         ))
     } else {
         file_name.push(&format!(
             "memflow_{}_{}",
-            variant.descriptor.name,
-            &variant.digest[..7]
+            metadata
+                .descriptors
+                .first()
+                .map(|d| d.name.clone())
+                .unwrap_or_else(|| "unknown".to_string()),
+            &metadata.digest[..7]
         ))
     }
 
@@ -123,7 +134,9 @@ pub async fn read_response_with_progress(response: Response) -> Result<Bytes> {
 pub struct LocalPlugin {
     pub plugin_file_name: PathBuf,
     pub meta_file_name: PathBuf,
-    pub variant: PluginVariant,
+    pub digest: String,
+    pub created_at: NaiveDateTime,
+    pub descriptor: PluginDescriptorInfo,
 }
 
 /// Returns a list of all local plugins with their .meta information attached (sorted in the same way as memflow-registry)
@@ -135,17 +148,22 @@ pub async fn local_plugins() -> Result<Vec<LocalPlugin>> {
         if let Some(extension) = path.path().extension() {
             if extension.to_str().unwrap_or_default() == "meta" {
                 let meta_file_name = path.path();
-                if let Ok(variant) = serde_json::from_str::<PluginVariant>(
+                if let Ok(metadata) = serde_json::from_str::<PluginMetadata>(
                     &tokio::fs::read_to_string(&meta_file_name).await?,
                 ) {
                     let mut plugin_file_name = meta_file_name.clone();
                     plugin_file_name.set_extension(memflow::plugins::plugin_extension());
+
                     // TODO: additionally check existence of the file name and pass it over
-                    result.push(LocalPlugin {
-                        plugin_file_name,
-                        meta_file_name,
-                        variant,
-                    });
+                    for descriptor in metadata.descriptors.into_iter() {
+                        result.push(LocalPlugin {
+                            plugin_file_name: plugin_file_name.clone(),
+                            meta_file_name: meta_file_name.clone(),
+                            digest: metadata.digest.clone(),
+                            created_at: metadata.created_at,
+                            descriptor,
+                        });
+                    }
                 } else {
                     // TODO: print warning about orphaned plugin and give hints
                     // on how to install plugins from source with memflowup
@@ -157,9 +175,9 @@ pub async fn local_plugins() -> Result<Vec<LocalPlugin>> {
     // sort by plugin_name, plugin_version and created_at
     result.sort_by_key(|plugin| {
         (
-            plugin.variant.descriptor.name.clone(),
-            Reverse(plugin.variant.descriptor.plugin_version),
-            Reverse(plugin.variant.created_at),
+            plugin.descriptor.name.clone(),
+            Reverse(plugin.descriptor.plugin_version),
+            Reverse(plugin.created_at),
         )
     });
 
@@ -177,11 +195,11 @@ pub async fn find_local_plugin(plugin_uri_str: &str) -> Result<LocalPlugin> {
         // plugin_uri is {name}:{version}
         // plugin_uri is {name}:{digest/digest_short}
         let version = plugin_uri.version();
-        if plugin_uri_str == plugin.variant.digest
-            || (plugin.variant.descriptor.name == plugin_uri.image()
+        if plugin_uri_str == plugin.digest
+            || (plugin.descriptor.name == plugin_uri.image()
                 && (version == "latest"
-                    || version == plugin.variant.descriptor.version
-                    || version == &plugin.variant.digest[..version.len()]))
+                    || version == plugin.descriptor.version
+                    || version == &plugin.digest[..version.len()]))
         {
             return Ok(plugin);
         }
