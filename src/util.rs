@@ -78,7 +78,7 @@ pub(crate) fn plugin_file_name(metadata: &PluginMetadata) -> PathBuf {
 
     // prepend the library name and append the file digest
     if cfg!(unix) {
-        file_name.push(&format!(
+        file_name.push(format!(
             "libmemflow_{}_{}",
             metadata
                 .descriptors
@@ -88,7 +88,7 @@ pub(crate) fn plugin_file_name(metadata: &PluginMetadata) -> PathBuf {
             &metadata.digest[..7]
         ))
     } else {
-        file_name.push(&format!(
+        file_name.push(format!(
             "memflow_{}_{}",
             metadata
                 .descriptors

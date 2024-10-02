@@ -22,8 +22,8 @@ console = "0.15"
 inquire = "0.7"
 
 # async runtime
-tokio = { version = "1.36.0", features = ["macros", "rt-multi-thread", "fs", "signal"] }
-bytes = "1.6"
+tokio = { version = "1.40.0", features = ["macros", "rt-multi-thread", "fs", "signal"] }
+bytes = "1.7"
 
 # serializing
 serde = { version = "1.0", features = ["derive"] }
@@ -39,13 +39,13 @@ which = "6.0"
 crates_io_api = { version = "0.11.0", default-features = false, features = ["rustls"] }
 
 # memflow-registry
-memflow = "0.2.3"
+memflow = ">=0.2.3"
 memflow-registry = "0.1"
 sha256 = "1.5"
 
 # source builds
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream"] }
-zip = "2.1.6"
+zip = "2.2"
 chrono = { version = "0.4", features = ["serde"] }
 
 # download progress
