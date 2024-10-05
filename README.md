@@ -4,7 +4,7 @@ This tool is meant to provide a really quick way to setup various memflow compon
 
 The recommended way is to install it through our automated script:
 ```sh
-curl --proto '=https' --tlsv1.2 -sSf https://sh.memflow.io | sh
+curl --proto '=https' --tlsv1.2 -sSf https://sh.memflow.io | bash
 ```
 
 Alternatively you can manually install it via cargo as well:
@@ -12,62 +12,75 @@ Alternatively you can manually install it via cargo as well:
 cargo install memflowup --force
 ```
 
-## Usage
+## Basic Usage
 
-See help:
-
+See the help:
 ```sh
-memflowup -h
+memflowup help
 ```
 
-Run interactively:
-
+Pull all plugins:
 ```sh
-memflowup interactive
+memflowup pull --all
 ```
 
-Install a set of connectors non-interactively:
-
+List all locally installed plugins:
 ```sh
-memflowup install memflow-qemu-procfs memflow-coredump
+memflowup plugins ls
 ```
 
-Same with development (0.2+) channel:
-
+List all available plugins in the default registry (http://registry.memflow.io):
 ```sh
-memflowup install -d memflow-qemu memflow-coredump
+memflowup plugins ls
 ```
 
-Update all connectors that are installed system-wide (`-s`) from development channel (`-d`):
-
+Delete a plugin locally:
 ```sh
-memflowup update -s -d
+memflowup plugins remove coredump
 ```
 
-Reinstall a connector:
-
+Cleanup old versions of locally installed plugins:
 ```
-memflowup install memflow-kvm -s -d --reinstall
+memflowup plugins clean
 ```
 
-## Migration from 0.1
+Install a plugin from a github repo:
+```
+memflowup build https://github.com/memflow/memflow-coredump
+```
 
-- TODO: auto migration? -> ask user if he wants to run it
-- Delete all system-wide installed plugins in /... -> ask
-- Delete plugin database in /.. -> ask
-- Purge all plugins that have no meta file -> ask
-- Ask to redownload all plugins -> ask
-- TODO: how do we know if migrations ran successfully and we do not have to run them again?
+Install a plugin from a folder:
+```
+cd memflow-coredump
+memflowup build -p .
+```
 
-- Create a config file to store things like token / priv key file (additioanlly to cmdline switches)
-  memflowup config token 123456
-  memflowup config priv-key-file bla.pem -> will store fullpath in config
-  memflowup config registry xyz.registry.io # overwrite default registry
+All commands additionally have a help (append `--help`) associated with them.
 
-- store current memflowup version in config file to see what migration steps need to be run
+
+## Interacting with other registries
+
+Memflowup features a configuration system that allows overriding some default properties.
+
+To override the default registry run:
+```
+memflowup config set registry http://my-registry.io
+memflowup config set pub_key_file /home/user/key_file.pub
+```
+All plugins in the memflow-registry are signed and the signature is checked by memflowup during the download process. Downloading from a custom registry requires setting up the according public key that was used for signing the files in the registry.
+
+If you want to push to your own registry you also have to provide a token and the private key file which is used to sign plugins locally before publishing them.
+
+
+## Migrate from memflowup 0.1
+
+- Delete all system-wide installed plugins in `/usr/lib/memflow`
+- Delete all installed plugins for the current user in `~/.local/lib/memflow`
+- Delete the `/etc/memflowup` folder
+- Reinstall all plugins via `memflowup pull --all`
 
 
 ## Troubleshooting:
 
-mac in case cc failed in proc-macro2
-xcode-select --install
+- In case you are using Mac OS and encounter an error building proc-macro2 run `xcode-select --install`
+
