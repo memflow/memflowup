@@ -31,7 +31,7 @@ memflowup plugins ls
 
 List all available plugins in the default registry (http://registry.memflow.io):
 ```sh
-memflowup plugins ls
+memflowup registry ls
 ```
 
 Delete a plugin locally:
