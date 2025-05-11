@@ -15,11 +15,15 @@ pub fn metadata() -> Command {
     Command::new("plugins")
         .subcommand_required(true)
         .subcommands([
-            Command::new("list")
-                .alias("ls")
-                .args([Arg::new("plugin_name")
+            Command::new("list").alias("ls").args([
+                Arg::new("plugin_name")
                     .help("name of the plugin as an additional filter")
-                    .action(ArgAction::Set)]),
+                    .action(ArgAction::Set),
+                Arg::new("wide")
+                    .help("show a wide table")
+                    .long("wide")
+                    .action(ArgAction::SetTrue),
+            ]),
             Command::new("clean").alias("purge"),
             Command::new("remove")
                 .alias("rm")
@@ -32,8 +36,13 @@ pub fn metadata() -> Command {
 pub async fn handle(matches: &ArgMatches) -> Result<()> {
     match matches.subcommand() {
         Some(("list", matches)) => {
-            super::print_plugin_versions_header();
-            list_local_plugins(matches.get_one::<String>("plugin_name").map(String::as_str)).await
+            let wide = matches.get_flag("wide");
+            print_local_plugin_header(wide);
+            list_local_plugins(
+                matches.get_one::<String>("plugin_name").map(String::as_str),
+                wide,
+            )
+            .await
         }
         Some(("remove", matches)) => {
             let plugin_uris = matches
@@ -62,7 +71,23 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
     }
 }
 
-async fn list_local_plugins(plugin_name: Option<&str>) -> Result<()> {
+#[allow(clippy::print_literal)]
+#[inline]
+fn print_local_plugin_header(wide: bool) {
+    if !wide {
+        println!(
+            "{0: <16} {1: <16} {2: <12} {3: <4} {4: <8}",
+            "NAME", "VERSION", "ARCH", "ABI", "DIGEST"
+        );
+    } else {
+        println!(
+            "{0: <16} {1: <16} {2: <12} {3: <4} {4: <8} {5: <65} {6:} {7: <64?}",
+            "NAME", "VERSION", "ARCH", "ABI", "DIGEST", "DIGEST_LONG", "CREATED", "PATH"
+        );
+    }
+}
+
+async fn list_local_plugins(plugin_name: Option<&str>, wide: bool) -> Result<()> {
     let plugins = util::local_plugins().await?;
     for plugin in plugins.into_iter() {
         // optionally filter by plugin name
@@ -72,20 +97,36 @@ async fn list_local_plugins(plugin_name: Option<&str>) -> Result<()> {
             }
         }
 
-        println!(
-            "{0: <16} {1: <16} {2: <12} {3: <4} {4: <8} {5: <65} {6:}",
-            plugin.descriptor.name,
-            plugin.descriptor.version,
-            format!(
-                "{:?}/{:?}",
-                plugin.descriptor.file_type, plugin.descriptor.architecture
-            )
-            .to_ascii_lowercase(),
-            plugin.descriptor.plugin_version,
-            &plugin.digest[..7],
-            plugin.digest,
-            plugin.created_at,
-        );
+        if !wide {
+            println!(
+                "{0: <16} {1: <16} {2: <12} {3: <4} {4: <8}",
+                plugin.descriptor.name,
+                plugin.descriptor.version,
+                format!(
+                    "{:?}/{:?}",
+                    plugin.descriptor.file_type, plugin.descriptor.architecture
+                )
+                .to_ascii_lowercase(),
+                plugin.descriptor.plugin_version,
+                &plugin.digest[..7],
+            );
+        } else {
+            println!(
+                "{0: <16} {1: <16} {2: <12} {3: <4} {4: <8} {5: <65} {6:} {7: <64?}",
+                plugin.descriptor.name,
+                plugin.descriptor.version,
+                format!(
+                    "{:?}/{:?}",
+                    plugin.descriptor.file_type, plugin.descriptor.architecture
+                )
+                .to_ascii_lowercase(),
+                plugin.descriptor.plugin_version,
+                &plugin.digest[..7],
+                plugin.digest,
+                plugin.created_at,
+                plugin.plugin_file_name,
+            );
+        }
     }
     Ok(())
 }

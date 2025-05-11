@@ -67,7 +67,7 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
 
             if let Some(plugin_name) = matches.get_one::<String>("plugin_name") {
                 let limit = matches.get_one::<usize>("limit").unwrap();
-                super::print_plugin_versions_header();
+                print_plugin_versions_header();
                 list_plugin_versions(registry, plugin_name, all_archs, *limit).await?;
             } else {
                 let versions = matches.get_flag("versions");
@@ -76,7 +76,7 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
                 let plugins = memflow_registry::client::plugins(registry).await?;
                 if versions {
                     // TODO: display plugins that do not have a version for our current os?
-                    super::print_plugin_versions_header();
+                    print_plugin_versions_header();
                     for plugin in plugins.iter() {
                         list_plugin_versions(registry, &plugin.name, all_archs, 1).await?;
                     }
@@ -112,6 +112,15 @@ pub async fn handle(matches: &ArgMatches) -> Result<()> {
             unreachable!()
         }
     }
+}
+
+#[allow(clippy::print_literal)]
+#[inline]
+fn print_plugin_versions_header() {
+    println!(
+        "{0: <16} {1: <16} {2: <12} {3: <4} {4: <8} {5: <65} {6:}",
+        "NAME", "VERSION", "ARCH", "ABI", "DIGEST", "DIGEST_LONG", "CREATED"
+    );
 }
 
 async fn list_plugin_versions(

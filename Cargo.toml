@@ -8,44 +8,46 @@ documentation = "https://docs.rs/memflowup"
 readme = "README.md"
 homepage = "https://memflow.github.io"
 repository = "https://github.com/memflow/memflowup"
-license-file = "LICENSE"
-keywords = [ "memflow", "introspection", "memflowup", "memory", "dma" ]
+license = "MIT"
+keywords = [ "memflow", "introspection", "memory", "dma" ]
 categories = [ "memory-management", "os" ]
+rust-version = "1.74.0"
 
 [dependencies]
 # general dependencies
 log = "0.4"
 env_logger = "0.11"
-thiserror = "1.0"
+thiserror = "2.0"
 clap = { version = "4.5", features = ["cargo"] }
 console = "0.15"
 inquire = "0.7"
 
 # async runtime
-tokio = { version = "1.40.0", features = ["macros", "rt-multi-thread", "fs", "signal"] }
-bytes = "1.7"
+tokio = { version = "1.45", features = ["macros", "rt-multi-thread", "fs", "signal"] }
+bytes = "1.10"
 
 # serializing
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
 # memflowup dirs
-dirs = "5.0"
+dirs = "6.0"
 
 # ensure_rust checks
-which = "6.0"
+which = "7.0"
 
 # update check
-crates_io_api = { version = "0.11.0", default-features = false, features = ["rustls"] }
+crates_io_api = { version = "0.11", default-features = false, features = ["rustls"] }
 
 # memflow-registry
 memflow = ">=0.2.3"
+#memflow-registry = { path = "../memflow-registry" }
 memflow-registry = "0.1"
-sha256 = "1.5"
+sha256 = "1.6"
 
 # source builds
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream"] }
-zip = "2.2"
+zip = "2.6"
 chrono = { version = "0.4", features = ["serde"] }
 
 # download progress
