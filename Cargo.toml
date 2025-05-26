@@ -47,7 +47,7 @@ sha256 = "1.6"
 
 # source builds
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream"] }
-zip = "2.6"
+zip = "4.0"
 chrono = { version = "0.4", features = ["serde"] }
 
 # download progress
